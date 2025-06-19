@@ -2,7 +2,7 @@
 
 import {motion} from "framer-motion"
 
-export const LoadingScreen = () => {
+const LoadingScreen = () => {
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -63,3 +63,4 @@ export const LoadingScreen = () => {
         </motion.div>
     );
 };
+export default LoadingScreen
