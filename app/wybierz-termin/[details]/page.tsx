@@ -8,15 +8,8 @@ import { loadStripe } from '@stripe/stripe-js';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
-// KROK 1: Komponent teraz przyjmuje 'params' jako props,
-// które Next.js automatycznie przekazuje dla dynamicznych stron.
-type BookingDetailsPageProps = {
-    params: {
-        details: string; // np. "2025-07-25_10-00"
-    }
-}
 
-export default function WybierzTerminPage({ params }: BookingDetailsPageProps) {
+export default function WybierzTerminPage({ params }: any) {
     // KROK 2: Odczytujemy dane z `params`, a nie z `useSearchParams`
     const { details } = params;
     const [dateStr, timeStrWithDash] = details ? details.split('_') : [null, null];
