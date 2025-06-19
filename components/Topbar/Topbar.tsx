@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { FiMenu, FiArrowRight, FiUser } from "react-icons/fi";
 import { MenuTopbar } from "./MenuTopbar";
 import { useRouter } from "next/navigation";
-import { LoadingScreen } from "@/app/page";
+import LoadingScreen from "../LoadingScreen";
 import { UserButton } from "./UserButton";
 import { SessionProvider } from "next-auth/react";
 // UWAGA: SessionProvider jest teraz w layout.tsx, więc nie jest już tutaj potrzebny.
