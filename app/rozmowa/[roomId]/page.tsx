@@ -106,7 +106,7 @@ export default function RoomPage() {
                             className="flex cursor-pointer items-center gap-4 px-8 py-4 rounded-full bg-green-500 text-white text-2xl font-chewy shadow-lg"
                         >
                             <FiPhone/>
-                            <span>Rozpocznij Lekcję</span>
+                            <span>Rozpocznij Lekcję.</span>
                         </motion.button>
                     </div>
                 )}
