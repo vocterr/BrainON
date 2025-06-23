@@ -1,7 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Domyślna konfiguracja dla PostgreSQL
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -11,23 +7,60 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum AppointmentStatus {
+  UPCOMING
+  COMPLETED
+  CANCELLED
+}
+
+enum AppointmentType {
+  ONLINE
+  TEACHER_HOME
+  STUDENT_HOME
+}
+
+enum Subject {
+  MATEMATYKA
+  INF02
+}
+
+enum CallStatus {
+  INITIATED
+  RINGING
+  CONNECTED
+  ENDED
+  FAILED
+  REJECTED
+  MISSED
+}
+
 // Model Użytkownika - rozbudowany o pola wymagane przez Next-Auth
 model User {
   id             String    @id @default(cuid())
   name           String?
   email          String?   @unique
-  role           String?
-  emailVerified  DateTime? // Musi być DateTime, a nie Boolean!
+  role           String?   @default("USER") // USER or ADMIN
+  emailVerified  DateTime?
   image          String?
   hashedPassword String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  // Relacje do innych modeli Next-Auth
+  // Next-Auth relations
   accounts     Account[]
   sessions     Session[]
-  createdCalls CallRoom[] @relation("Admin")
-  joinedCalls  CallRoom[] @relation("Student")
+  
+  // Call relations
+  createdCalls CallRoom[]   @relation("Admin")
+  joinedCalls  CallRoom[]   @relation("Student")
+  
+  // Call record relations
+  adminCalls    CallRecord[] @relation("AdminCalls")
+  studentCalls  CallRecord[] @relation("StudentCalls")
+  
+  // Appointment relations
+  lessonsAsTeacher Appointment[] @relation("Teacher")
+  lessonsAsStudent Appointment[] @relation("Student")
 }
 
 // Model Konta - przechowuje połączenie z dostawcami OAuth (np. Google)
@@ -68,11 +101,12 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+// Model for video call rooms
 model CallRoom {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
 
-  // Kto stworzył rozmowę (admin)
+  // Kto stworzył rozmowę (admin/teacher)
   adminId   String
   admin     User     @relation("Admin", fields: [adminId], references: [id])
 
@@ -80,6 +114,48 @@ model CallRoom {
   studentId String
   student   User     @relation("Student", fields: [studentId], references: [id])
 
-  // Status pokoju, np. 'waiting', 'active', 'finished'
-  status    String   @default("waiting")
+  // Status pokoju
+  status    String   @default("waiting") // waiting, active, finished
+}
+
+// Model for tracking call history and analytics
+model CallRecord {
+  id          String    @id @default(uuid())
+  adminId     String
+  studentId   String
+  status      CallStatus @default(INITIATED)
+  startedAt   DateTime   @default(now())
+  connectedAt DateTime?
+  endedAt     DateTime?
+  duration    Int?       // Duration in seconds
+  
+  admin       User      @relation("AdminCalls", fields: [adminId], references: [id])
+  student     User      @relation("StudentCalls", fields: [studentId], references: [id])
+  
+  @@index([adminId])
+  @@index([studentId])
+  @@index([startedAt])
+}
+
+// Model for appointments/lessons
+model Appointment {
+  id        String            @id @default(cuid())
+  createdAt DateTime          @default(now())
+  date      DateTime          // Data i godzina lekcji
+  status    AppointmentStatus @default(UPCOMING)
+  type      AppointmentType
+  subject   Subject
+  price     Int               // Cena w groszach
+  notes     String?           // Notatki od ucznia
+
+  teacherId String
+  teacher   User   @relation("Teacher", fields: [teacherId], references: [id])
+
+  studentId String
+  student   User   @relation("Student", fields: [studentId], references: [id])
+  
+  @@index([date])
+  @@index([teacherId])
+  @@index([studentId])
+  @@index([status])
 }

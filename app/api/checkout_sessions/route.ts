@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import prisma from '@/prisma/prisma';
 
-// Inicjalizujemy Stripe z naszym tajnym kluczem
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-05-28.basil',
   typescript: true,
@@ -9,52 +9,44 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    // Logujemy całe otrzymane body w terminalu serwera
-    console.log("Otrzymano body w API:", body);
+    // POPRAWKA: Oczekujemy teraz `appointmentDateTime` zamiast osobnych `date` i `time`
+    const { appointmentDateTime, subject, option, price, notes, userId } = await request.json();
 
-    const { date, time, option, price, notes } = body;
-
-    // POPRAWKA: Bardziej szczegółowa walidacja
-    if (!date) {
-      return NextResponse.json({ error: 'Brakuje daty (date).' }, { status: 400 });
-    }
-    if (!time) {
-      return NextResponse.json({ error: 'Brakuje czasu (time).' }, { status: 400 });
-    }
-    if (!option || !option.title) {
-      return NextResponse.json({ error: 'Brakuje opcji lekcji (option).' }, { status: 400 });
-    }
-    if (!price) {
-      return NextResponse.json({ error: 'Brakuje ceny (price).' }, { status: 400 });
+    // POPRAWKA: Zaktualizowana walidacja
+    if (!userId || !appointmentDateTime || !option || !price || !subject) {
+      return NextResponse.json({ error: 'Brakuje danych do utworzenia sesji płatności.' }, { status: 400 });
     }
     
-    // Tworzymy sesję płatności Stripe Checkout
+    const dateObj = new Date(appointmentDateTime);
+    if (isNaN(dateObj.getTime())) {
+        return NextResponse.json({ error: 'Nieprawidłowa wartość daty/czasu' }, { status: 400 });
+    }
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card', 'p24', 'blik'],
       mode: 'payment',
-      
       line_items: [
         {
           price_data: {
             currency: 'pln',
             product_data: {
-              name: `Korepetycje Brain:ON - ${option.title}`,
-              description: `Termin: ${date} o godz. ${time}`,
+              name: `Korepetycje Brain:ON - ${subject}`,
+              description: `Termin: ${dateObj.toLocaleDateString('pl-PL', { day: 'numeric', month: 'long' })} o ${dateObj.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}`,
             },
             unit_amount: price * 100,
           },
           quantity: 1,
         },
       ],
-      
       metadata: {
-        bookingDate: date,
-        bookingTime: time,
-        bookingNotes: notes || "Brak", // Upewniamy się, że nie jest null
+        studentId: userId,
+        date: dateObj.toISOString(),
+        subject: subject,
+        type: option.id,
+        price: price,
+        notes: notes || "Brak",
       },
-
-      success_url: `${request.headers.get('origin')}/platnosc/sukces?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${request.headers.get('origin')}/moje-terminy?status=success`,
       cancel_url: request.headers.get('referer') || `${request.headers.get('origin')}`,
     });
 

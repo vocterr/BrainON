@@ -4,13 +4,12 @@ import { useState, useEffect, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { FiMenu, FiArrowRight, FiUser } from "react-icons/fi";
 import { MenuTopbar } from "./MenuTopbar";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import LoadingScreen from "../LoadingScreen";
 import { UserButton } from "./UserButton";
-import { SessionProvider } from "next-auth/react";
-// UWAGA: SessionProvider jest teraz w layout.tsx, więc nie jest już tutaj potrzebny.
 
 export default function Topbar() {
+    const pathname = usePathname();
     const router = useRouter();
     const [routeLoading, startTransition] = useTransition();
     const [isMenuClicked, setIsMenuClicked] = useState(false);
@@ -53,79 +52,85 @@ export default function Topbar() {
     };
 
     return (
-        <SessionProvider>
-            <motion.nav
-                initial={{ y: -100 }}
-                animate={{ y: isVisible ? 0 : -100 }}
-                transition={{ duration: 0.35, ease: "easeInOut" }}
-                className={`fixed flex items-center justify-center top-0 left-1/2 -translate-x-1/2 w-full h-20 z-50 font-chewy transition-all duration-300 ${scrolled
+
+        <>
+            {pathname.startsWith("/rozmowa") ? (
+                <></>
+            ) : (
+                <motion.nav
+                    initial={{ y: -100 }}
+                    animate={{ y: isVisible ? 0 : -100 }}
+                    transition={{ duration: 0.35, ease: "easeInOut" }}
+                    className={`fixed flex items-center justify-center top-0 left-1/2 -translate-x-1/2 w-full h-20 z-50 font-chewy transition-all duration-300 ${scrolled
                         ? 'bg-slate-900/60 backdrop-blur-lg'
                         : 'bg-transparent'
-                    }`}
-            >
-                {/* Subtle bottom border that appears on scroll */}
-                <motion.div
-                    animate={{ opacity: scrolled ? 1 : 0 }}
-                    className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-purple-400/50 to-transparent"
-                />
-
-                <motion.div
-                    variants={topbarVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="w-full h-full max-w-[1400px]  flex items-center justify-between px-4 md:px-6"
+                        }`}
                 >
-                    {/* ===== LEFT SECTION: LOGO ===== */}
-                    <motion.div variants={navItemVariants}>
-                        <motion.button
-                            onClick={() => changeRoute("/")}
-                            whileHover="hover"
-                            className="flex items-center gap-2 text-3xl text-white drop-shadow-lg cursor-pointer"
-                        >
-                            <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600">
-                                Brain:<b className="bg-gradient-to-r from-amber-600 to-lime-600 bg-clip-text text-transparent ">ON</b>
-                            </span>
-                        </motion.button>
-                    </motion.div>
+                    {/* Subtle bottom border that appears on scroll */}
+                    <motion.div
+                        animate={{ opacity: scrolled ? 1 : 0 }}
+                        className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-purple-400/50 to-transparent"
+                    />
 
-                    {/* ===== CENTER SECTION: DESKTOP NAV ===== */}
-                    <NavLinks changeRoute={changeRoute} />
-
-                    {/* ===== RIGHT SECTION: ACTIONS ===== */}
-                    <motion.div variants={navItemVariants} className="flex items-center gap-6">
-                        <motion.button
-                            onClick={() => changeRoute("zacznij-teraz")}
-                            whileHover={{ scale: 1.05, boxShadow: "0px 5px 20px -5px rgba(251, 191, 36, 0.4)" }}
-                            whileTap={{ scale: 0.95 }}
-                            className="hidden md:flex hover:cursor-pointer items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-yellow-400 via-orange-500 to-orange-600 text-white shadow-lg text-base"
-                        >
-                            Zacznij Teraz
-                            <FiArrowRight />
-                        </motion.button>
-                        <UserButton changeRoute={changeRoute}/>
-                        
-
-                        {/* Mobile Menu Button */}
-                        <div className="md:hidden">
+                    <motion.div
+                        variants={topbarVariants}
+                        initial="hidden"
+                        animate="visible"
+                        className="w-full h-full max-w-[1400px]  flex items-center justify-between px-4 md:px-6"
+                    >
+                        {/* ===== LEFT SECTION: LOGO ===== */}
+                        <motion.div variants={navItemVariants}>
                             <motion.button
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.9 }}
-                                onClick={() => setIsMenuClicked(true)}
-                                className="p-3 rounded-full bg-white/5 border border-white/20 backdrop-blur-sm"
+                                onClick={() => changeRoute("/")}
+                                whileHover="hover"
+                                className="flex items-center gap-2 text-3xl text-white drop-shadow-lg cursor-pointer"
                             >
-                                <FiMenu className="text-white h-6 w-6" />
+                                <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600">
+                                    Brain:<b className="bg-gradient-to-r from-amber-600 to-lime-600 bg-clip-text text-transparent ">ON</b>
+                                </span>
                             </motion.button>
-                        </div>
+                        </motion.div>
+
+                        {/* ===== CENTER SECTION: DESKTOP NAV ===== */}
+                        <NavLinks changeRoute={changeRoute} />
+
+                        {/* ===== RIGHT SECTION: ACTIONS ===== */}
+                        <motion.div variants={navItemVariants} className="flex items-center gap-6">
+                            <motion.button
+                                onClick={() => changeRoute("zacznij-teraz")}
+                                whileHover={{ scale: 1.05, boxShadow: "0px 5px 20px -5px rgba(251, 191, 36, 0.4)" }}
+                                whileTap={{ scale: 0.95 }}
+                                className="hidden md:flex hover:cursor-pointer items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-yellow-400 via-orange-500 to-orange-600 text-white shadow-lg text-base"
+                            >
+                                Zacznij Teraz
+                                <FiArrowRight />
+                            </motion.button>
+                            <UserButton changeRoute={changeRoute} />
+
+
+                            {/* Mobile Menu Button */}
+                            <div className="md:hidden">
+                                <motion.button
+                                    whileHover={{ scale: 1.1 }}
+                                    whileTap={{ scale: 0.9 }}
+                                    onClick={() => setIsMenuClicked(true)}
+                                    className="p-3 rounded-full bg-white/5 border border-white/20 backdrop-blur-sm"
+                                >
+                                    <FiMenu className="text-white h-6 w-6" />
+                                </motion.button>
+                            </div>
+                        </motion.div>
                     </motion.div>
-                </motion.div>
-            </motion.nav>
+                </motion.nav>
+            )}
+
 
             {/* Mobile Menu Overlay */}
             <MenuTopbar isMenuClicked={isMenuClicked} setIsMenuClicked={setIsMenuClicked} />
             {routeLoading && (
                 <LoadingScreen />
             )}
-        </SessionProvider>
+        </>
     );
 }
 
