@@ -91,7 +91,7 @@ export default function ContactPage() {
                 <p className="font-sans text-purple-200/70 mb-4">Preferuję kontakt mailowy. Odpowiadam na wszystkie wiadomości w ciągu 24 godzin.</p>
                 {/* ===== WPISZ SWÓJ ADRES E-MAIL ===== */}
                 <a href="mailto:kontakt@twojastrona.pl" className="font-sans text-lg text-yellow-400 hover:text-yellow-300 transition-colors">
-                  kontakt@twojastrona.pl
+                  kontakt@korki24.pl
                 </a>
               </div>
 

@@ -107,7 +107,7 @@ export default function RegisterPage() {
             >
                 {/* Nagłówek */}
                 <motion.div variants={itemVariants} className="text-center mb-8">
-                    <h1 className="text-5xl bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400 mb-2">Dołącz do Brain:ON</h1>
+                    <h1 className="text-5xl bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400 mb-2">Dołącz do korki24.pl</h1>
                     <p className="font-sans text-purple-200/70">Stwórz konto i odblokuj swój potencjał.</p>
                 </motion.div>
 

@@ -1,5 +1,6 @@
 "use client";
 
+// OPTYMALIZACJA: Importujemy useEffect do stworzenia hooka
 import { useState, useEffect, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { FiMenu, FiArrowRight, FiUser } from "react-icons/fi";
@@ -7,6 +8,24 @@ import { MenuTopbar } from "./MenuTopbar";
 import { usePathname, useRouter } from "next/navigation";
 import LoadingScreen from "../LoadingScreen";
 import { UserButton } from "./UserButton";
+
+// OPTYMALIZACJA: Prosty hook, który sprawdza, czy ekran jest w wersji desktopowej.
+// Używamy breakpointu `md` (768px), bo tam zmienia się Twoja nawigacja.
+const useIsDesktop = () => {
+    const [isDesktop, setIsDesktop] = useState(false);
+
+    useEffect(() => {
+        const checkScreenSize = () => {
+            setIsDesktop(window.innerWidth >= 768);
+        };
+        checkScreenSize();
+        window.addEventListener('resize', checkScreenSize);
+        return () => window.removeEventListener('resize', checkScreenSize);
+    }, []);
+
+    return isDesktop;
+};
+
 
 export default function Topbar() {
     const pathname = usePathname();
@@ -17,25 +36,37 @@ export default function Topbar() {
     const [lastScrollY, setLastScrollY] = useState(0);
     const [scrolled, setScrolled] = useState(false);
 
+    // OPTYMALIZACJA: Używamy naszego hooka w komponencie
+    const isDesktop = useIsDesktop();
+
     const changeRoute = (route: string) => {
         startTransition(() => {
             router.push(route);
         });
     }
 
-    // Navbar scroll control
+    // OPTYMALIZACJA: Cała logika chowania/pokazywania paska jest teraz warunkowa
     useEffect(() => {
         const controlNavbar = () => {
             const currentScrollY = window.scrollY;
-            setIsVisible(currentScrollY <= lastScrollY || currentScrollY < 100);
-            setScrolled(currentScrollY > 20);
+            // Ta logika działa tylko na desktopie
+            if (isDesktop) {
+                setIsVisible(currentScrollY <= lastScrollY || currentScrollY < 100);
+                setScrolled(currentScrollY > 20);
+            }
             setLastScrollY(currentScrollY);
         };
+        
+        // Na mobile, ustawiamy od razu stan "przewinięty i widoczny"
+        if (!isDesktop) {
+            setIsVisible(true);
+            setScrolled(true);
+        }
+
         window.addEventListener('scroll', controlNavbar);
         return () => window.removeEventListener('scroll', controlNavbar);
-    }, [lastScrollY]);
+    }, [lastScrollY, isDesktop]); // Dodajemy isDesktop do zależności
 
-    // Staggered animation for nav items
     const topbarVariants = {
         hidden: { opacity: 0 },
         visible: {
@@ -52,23 +83,24 @@ export default function Topbar() {
     };
 
     return (
-
         <>
             {pathname.startsWith("/rozmowa") ? (
                 <></>
             ) : (
                 <motion.nav
-                    initial={{ y: -100 }}
-                    animate={{ y: isVisible ? 0 : -100 }}
+                    initial={{ y: 0 }} // Zaczynamy od widocznego paska
+                    // OPTYMALIZACJA: Animacja chowania działa tylko na desktopie
+                    animate={{ y: isDesktop && !isVisible ? -100 : 0 }}
                     transition={{ duration: 0.35, ease: "easeInOut" }}
-                    className={`fixed flex items-center justify-center top-0 left-1/2 -translate-x-1/2 w-full h-20 z-50 font-chewy transition-all duration-300 ${scrolled
+                    // OPTYMALIZACJA: Klasa tła jest nadawana na podstawie `scrolled` (desktop) lub na stałe (mobile)
+                    className={`fixed flex items-center justify-center top-0 left-0 w-full h-20 z-50 font-chewy transition-all duration-300 ${scrolled || !isDesktop
                         ? 'bg-slate-900/60 backdrop-blur-lg'
                         : 'bg-transparent'
                         }`}
                 >
-                    {/* Subtle bottom border that appears on scroll */}
+                    {/* OPTYMALIZACJA: Kreska jest widoczna, gdy `scrolled` lub gdy jest to mobile */}
                     <motion.div
-                        animate={{ opacity: scrolled ? 1 : 0 }}
+                        animate={{ opacity: scrolled || !isDesktop ? 1 : 0 }}
                         className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-purple-400/50 to-transparent"
                     />
 
@@ -76,7 +108,7 @@ export default function Topbar() {
                         variants={topbarVariants}
                         initial="hidden"
                         animate="visible"
-                        className="w-full h-full max-w-[1400px]  flex items-center justify-between px-4 md:px-6"
+                        className="w-full h-full max-w-[1400px] flex items-center justify-between px-4 md:px-6"
                     >
                         {/* ===== LEFT SECTION: LOGO ===== */}
                         <motion.div variants={navItemVariants}>
@@ -86,7 +118,7 @@ export default function Topbar() {
                                 className="flex items-center gap-2 text-3xl text-white drop-shadow-lg cursor-pointer"
                             >
                                 <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600">
-                                    Brain:<b className="bg-gradient-to-r from-amber-600 to-lime-600 bg-clip-text text-transparent ">ON</b>
+                                    korki24.<b className="bg-gradient-to-r from-amber-600 to-lime-600 bg-clip-text text-transparent ">pl</b>
                                 </span>
                             </motion.button>
                         </motion.div>
@@ -124,8 +156,6 @@ export default function Topbar() {
                 </motion.nav>
             )}
 
-
-            {/* Mobile Menu Overlay */}
             <MenuTopbar isMenuClicked={isMenuClicked} setIsMenuClicked={setIsMenuClicked} />
             {routeLoading && (
                 <LoadingScreen />
@@ -134,7 +164,6 @@ export default function Topbar() {
     );
 }
 
-// Sub-component for the navigation links to keep the main component clean
 const NavLinks = ({ changeRoute }: { changeRoute: (route: string) => void }) => {
     const [hoveredLink, setHoveredLink] = useState<string | null>(null);
     const links = ["Matematyka", "INF.02", "O mnie", "Kontakt"];
@@ -147,7 +176,7 @@ const NavLinks = ({ changeRoute }: { changeRoute: (route: string) => void }) => 
     return (
         <motion.div
             variants={navItemVariants}
-            className="hidden md:flex  items-center justify-center gap-2 lg:gap-6 2xl:gap-12 relative bg-white/5 p-2 rounded-full border lg:w-1/2 xl:w-[60%]  border-white/10"
+            className="hidden md:flex items-center justify-center gap-2 lg:gap-6 2xl:gap-12 relative bg-white/5 p-2 rounded-full border lg:w-1/2 xl:w-[60%] border-white/10"
         >
             {links.map((link) => (
                 <button
