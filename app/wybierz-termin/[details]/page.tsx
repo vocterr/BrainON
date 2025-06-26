@@ -19,7 +19,7 @@ export default function WybierzTerminPage() {
     const router = useRouter();
     const { data: session } = useSession();
     const params = useParams();
-    const details = params.details as string;
+    const details = params?.details as string || "";
     const isMobile = useIsMobile(); // KROK 2: Użycie hooka
 
     const [dateStr, timeStrWithDash] = details ? details.split('_') : [null, null];
