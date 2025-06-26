@@ -2,7 +2,7 @@ import { io, Socket } from 'socket.io-client';
 
 const SOCKET_URL = process.env.NODE_ENV === 'production' 
     ? process.env.NEXT_PUBLIC_APP_URL || ''
-    : 'http://localhost:3000';
+    : process.env.NEXT_PUBLIC_SOCKET_URL || 'http://192.168.1.72:3000';
 
 export const socket: Socket = io(SOCKET_URL, {
     path: '/api/socket',

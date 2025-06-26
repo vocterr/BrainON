@@ -1,10 +1,13 @@
-import React, { Dispatch, SetStateAction } from 'react';
+"use client";
+
+import React, { Dispatch, SetStateAction, useEffect } from 'react';
 import { motion, AnimatePresence } from "framer-motion";
 import { FiBookOpen, FiCode, FiMail, FiUser, FiArrowRight, FiLogIn, FiLogOut, FiLoader } from 'react-icons/fi';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+// KROK 1: Zaimportuj hook, który stworzyliśmy wcześniej
+import { useIsMobile } from '@/lib/useIsMobile';
 
-// Komponent przyjmuje teraz router do obsługi nawigacji
 export const MenuTopbar = ({ isMenuClicked, setIsMenuClicked }: { 
     isMenuClicked: boolean, 
     setIsMenuClicked: Dispatch<SetStateAction<boolean>> 
@@ -12,8 +15,20 @@ export const MenuTopbar = ({ isMenuClicked, setIsMenuClicked }: {
     
     const { data: session, status } = useSession();
     const router = useRouter();
+    // KROK 2: Użyj hooka w komponencie
+    const isMobile = useIsMobile();
+
+    useEffect(() => {
+        if (isMenuClicked) {
+            document.body.classList.add('overflow-hidden');
+        } else {
+            document.body.classList.remove('overflow-hidden');
+        }
+        return () => {
+            document.body.classList.remove('overflow-hidden');
+        };
+    }, [isMenuClicked]);
     
-    // Funkcja do zamykania menu i nawigacji
     const handleNavigation = (route: string) => {
         setIsMenuClicked(false);
         router.push(route);
@@ -26,18 +41,22 @@ export const MenuTopbar = ({ isMenuClicked, setIsMenuClicked }: {
         { name: "Kontakt", route: "/kontakt", icon: FiMail, color: "from-purple-700 to-slate-700" }
     ];
 
+    // KROK 3: Zmodyfikuj warianty animacji, aby były zależne od `isMobile`
     const containerVariants = {
         hidden: { opacity: 0 },
         visible: {
             opacity: 1,
             transition: {
-                staggerChildren: 0.08, // Delikatnie przyspieszamy animacje
+                // Wyłącz animację "schodkową" na telefonach dla natychmiastowego efektu
+                staggerChildren: isMobile ? 0 : 0.08,
             }
         }
     };
 
     const itemVariants = {
-        hidden: { opacity: 0, x: -40 },
+        // Na telefonie elementy startują od razu widoczne i na swoim miejscu (opacity: 1, x: 0)
+        // Na desktopie animują się z lewej strony (opacity: 0, x: -40)
+        hidden: isMobile ? { opacity: 1, x: 0 } : { opacity: 0, x: -40 },
         visible: { opacity: 1, x: 0 }
     };
 
@@ -49,31 +68,29 @@ export const MenuTopbar = ({ isMenuClicked, setIsMenuClicked }: {
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.3 }}
-                    className="fixed font-chewy inset-0 z-[100] bg-slate-900/80 backdrop-blur-2xl"
+                    className="fixed font-chewy inset-0 top-0 left-0 z-[99999] bg-slate-900/80 backdrop-blur-2xl"
                 >
                     <div className="w-full h-full flex flex-col items-center justify-center relative overflow-hidden p-4">
-                        {/* Tło Aurora Glow */}
-                        <div className="absolute inset-0 z-0 opacity-40">
+                        <div className="absolute inset-0 z-0 opacity-40 hidden md:block">
                             <motion.div animate={{ x: ['-5%', '5%', '-5%'], y: ['-10%', '10%', '-10%'] }} transition={{ duration: 80, repeat: Infinity, ease: "linear" }} className="absolute top-[-50%] left-[-50%] w-[150vw] h-[150vw] bg-purple-600/50 rounded-full blur-3xl" />
                             <motion.div animate={{ x: ['5%', '-5%', '5%'], y: ['10%', '-10%', '10%'] }} transition={{ duration: 90, repeat: Infinity, ease: "linear" }} className="absolute bottom-[-50%] right-[-50%] w-[150vw] h-[150vw] bg-cyan-500/40 rounded-full blur-3xl" />
                         </div>
 
                         <motion.div 
+                            // KROK 4: Przekaż zmodyfikowane warianty do komponentów motion
                             variants={containerVariants}
                             initial="hidden"
                             animate="visible"
                             exit="hidden"
                             className="relative z-10 flex flex-col items-center gap-4"
                         >
-                            {/* Nagłówek i Logo */}
-                            <motion.div variants={itemVariants} className="text-center">
+                            <motion.div variants={itemVariants} onClick={() => handleNavigation("/")} className="text-center cursor-pointer">
                                 <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600 text-5xl">
                                     korki24.<b className="bg-gradient-to-r from-amber-600 to-lime-600 bg-clip-text text-transparent ">pl</b>
                                 </span>
                                 <p className="font-sans text-purple-200/70 mt-2">Nawiguj do sukcesu</p>
                             </motion.div>
 
-                            {/* Przyciski Menu */}
                             <div className="flex flex-col space-y-3">
                                 {menuItems.map((item) => (
                                     <motion.div
@@ -98,7 +115,6 @@ export const MenuTopbar = ({ isMenuClicked, setIsMenuClicked }: {
                                 ))}
                             </div>
                             
-                            {/* Sekcja przycisków akcji */}
                             <motion.div variants={itemVariants} className="w-full max-w-[280px] mt-4 flex flex-col gap-3">
                                 <button
                                     onClick={() => handleNavigation('/zacznij-teraz')}
@@ -108,39 +124,25 @@ export const MenuTopbar = ({ isMenuClicked, setIsMenuClicked }: {
                                     <FiArrowRight />
                                 </button>
                                 
-                                {status === 'loading' && (
-                                    <div className="w-full flex items-center justify-center p-3 rounded-xl bg-slate-700/50">
-                                        <FiLoader className="animate-spin text-slate-400" />
-                                    </div>
-                                )}
+                                {status === 'loading' && ( <div className="w-full flex items-center justify-center p-3 rounded-xl bg-slate-700/50"><FiLoader className="animate-spin text-slate-400" /></div> )}
                                 
                                 {status === 'unauthenticated' && (
-                                    <button
-                                        onClick={() => handleNavigation('/login')}
-                                        className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-slate-700/50 border border-slate-600 text-white text-lg font-sans hover:bg-slate-700 transition-colors"
-                                    >
+                                    <button onClick={() => handleNavigation('/login')} className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-slate-700/50 border border-slate-600 text-white text-lg font-sans hover:bg-slate-700 transition-colors">
                                         <FiLogIn />
                                         <span>Zaloguj się</span>
                                     </button>
                                 )}
 
                                 {status === 'authenticated' && (
-                                    <button
-                                        onClick={() => {
-                                            signOut();
-                                            setIsMenuClicked(false);
-                                        }}
-                                        className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-lg font-sans hover:bg-red-500/30 transition-colors"
-                                    >
+                                    <button onClick={() => { signOut(); setIsMenuClicked(false); }} className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-lg font-sans hover:bg-red-500/30 transition-colors">
                                         <FiLogOut />
                                         <span>Wyloguj się</span>
                                     </button>
                                 )}
                             </motion.div>
                             
-                            {/* Przycisk Zamknij */}
                             <motion.div variants={itemVariants}>
-                                <button onClick={() => setIsMenuClicked(false)} className='w-full text-center py-2 mt-2 font-sans text-purple-300/80 hover:text-white transition-colors'>
+                                <button onClick={() => setIsMenuClicked(false)} className='w-full text-center pb-4 font-sans text-purple-300/80 hover:text-white transition-colors'>
                                     Zamknij
                                 </button>
                             </motion.div>

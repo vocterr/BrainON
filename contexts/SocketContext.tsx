@@ -1,70 +1,72 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { io, Socket } from 'socket.io-client';
 import { useSession } from 'next-auth/react';
-import { socket } from '@/lib/socket';
 
-interface SocketContextValue {
-    socket: typeof socket;
+interface SocketContextType {
+    socket: Socket;
     isConnected: boolean;
 }
 
-const SocketContext = createContext<SocketContextValue>({
+const SOCKET_URL = process.env.NODE_ENV === 'production' 
+    ? process.env.NEXT_PUBLIC_APP_URL || ''
+    : process.env.NEXT_PUBLIC_SOCKET_URL || 'http://192.168.1.72:3000';
+
+const socket: Socket = io(SOCKET_URL, {
+    path: '/api/socket',
+    autoConnect: false,
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    transports: ['websocket', 'polling'],
+    upgrade: true,
+    rememberUpgrade: true,
+});
+
+const SocketContext = createContext<SocketContextType>({
     socket,
     isConnected: false
 });
 
-export const useSocket = () => useContext(SocketContext);
+// FILE: contexts/SocketContext.tsx
+// (Only the useEffect hook is shown, the rest of the file is the same)
 
-export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
+//... imports and context creation ...
+export function SocketProvider({ children }: { children: React.ReactNode }) {
     const { data: session, status } = useSession();
     const [isConnected, setIsConnected] = useState(socket.connected);
-    const hasRegisteredRef = useRef(false);
 
     useEffect(() => {
         const onConnect = () => {
             console.log('[SocketContext] Socket connected:', socket.id);
             setIsConnected(true);
             
-            // Register user ONLY here, once per connection
-            if (session?.user?.id && !hasRegisteredRef.current) {
-                console.log('[SocketContext] Registering user:', session.user.id);
+            if (session?.user?.id) {
+                // DEBUG: Add a log here to see it firing
+                console.log(`[SocketContext] DEBUG: Authenticated. Emitting 'register-user' for userId: [${session.user.id}]`);
                 socket.emit('register-user', session.user.id);
-                hasRegisteredRef.current = true;
             }
         };
 
         const onDisconnect = () => {
             console.log('[SocketContext] Socket disconnected');
             setIsConnected(false);
-            hasRegisteredRef.current = false; // Reset on disconnect
         };
 
-        // Add listeners
-        socket.on('connect', onConnect);
-        socket.on('disconnect', onDisconnect);
-
-        // Handle authentication state changes
-        if (status === 'authenticated' && session?.user?.id) {
+        if (status === 'authenticated') {
+            socket.on('connect', onConnect);
+            socket.on('disconnect', onDisconnect);
             if (!socket.connected) {
-                console.log('[SocketContext] Authenticated - connecting socket...');
                 socket.connect();
-            } else if (!hasRegisteredRef.current) {
-                // If already connected but not registered, register now
-                console.log('[SocketContext] Already connected - registering user');
-                socket.emit('register-user', session.user.id);
-                hasRegisteredRef.current = true;
             }
-        } else if (status === 'unauthenticated') {
+        } 
+        else if (status === 'unauthenticated') {
             if (socket.connected) {
-                console.log('[SocketContext] Unauthenticated - disconnecting socket...');
-                hasRegisteredRef.current = false;
                 socket.disconnect();
             }
         }
-
-        // Set initial state
-        setIsConnected(socket.connected);
 
         return () => {
             socket.off('connect', onConnect);
@@ -77,4 +79,13 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
             {children}
         </SocketContext.Provider>
     );
+}
+// ... useSocket hook ...
+
+export const useSocket = () => {
+    const context = useContext(SocketContext);
+    if (!context) {
+        throw new Error('useSocket must be used within a SocketProvider');
+    }
+    return context;
 };

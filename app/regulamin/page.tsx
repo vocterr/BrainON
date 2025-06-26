@@ -1,11 +1,13 @@
+// FILE: app/regulamin/page.tsx
+
 "use client";
 
 import { motion } from 'framer-motion';
+import { useIsMobile } from '@/lib/useIsMobile'; // KROK 1: Import
 
 export default function RegulaminPage() {
-    
-    // ===== UPROSZCZONY REGULAMIN (WERSJA "NA START") =====
-    // UWAGA: To jest absolutne minimum. Nadal zalecana jest konsultacja z prawnikiem w przyszłości.
+    const isMobile = useIsMobile(); // KROK 2: Użycie hooka
+
     const sections = [
         {
             id: "wstep",
@@ -33,7 +35,7 @@ export default function RegulaminPage() {
                 "Możesz bezpłatnie odwołać lekcję i otrzymać pełen zwrot pieniędzy, jeśli zrobisz to najpóźniej <strong>24 godziny</strong> przed jej zaplanowanym rozpoczęciem. Wystarczy, że do mnie napiszesz. Jeśli odwołasz lekcję później niż 24 godziny przed terminem lub nie pojawisz się na niej, opłata niestety przepada.",
                 "<strong>2. Jeśli ja muszę odwołać lekcję:</strong>",
                 "Jeśli z jakiegoś ważnego powodu (np. choroba) to ja będę musiał odwołać naszą lekcję, natychmiast Cię o tym poinformuję. W takiej sytuacji otrzymasz oczywiście <strong>100% zwrotu pieniędzy</strong> lub, jeśli wolisz, zaproponuję Ci inny, pasujący termin.",
-                 "<strong>3. Spóźnienia:</strong>",
+                "<strong>3. Spóźnienia:</strong>",
                 "Szanujemy swój czas. Jeśli spóźnisz się na lekcję, niestety nie będę mógł jej przedłużyć. Jeśli Twoje spóźnienie przekroczy 20 minut, traktuję to jako nieobecność."
             ]
         },
@@ -55,35 +57,45 @@ export default function RegulaminPage() {
             ]
         },
     ];
+    
+    // KROK 3: Warunkowe animacje
+    const headerAnimation = {
+        initial: isMobile ? { opacity: 1, y: 0 } : { opacity: 0, y: -20 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.5 }
+    };
+
+    const sidebarAnimation = {
+        initial: isMobile ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 },
+        animate: { opacity: 1, x: 0 },
+        transition: { duration: 0.5, delay: 0.2 }
+    };
+
+    const contentAnimation = {
+        initial: isMobile ? { opacity: 1 } : { opacity: 0 },
+        animate: { opacity: 1 },
+        transition: { duration: 0.5, delay: 0.4 }
+    };
+
 
     return (
         <div className="w-full bg-slate-900 relative overflow-hidden text-white">
-            <div className="absolute top-0 left-0 w-full h-full -z-10 opacity-20">
+            <div className="absolute top-0 left-0 w-full h-full -z-10 opacity-20 hidden md:block">
                 <motion.div animate={{ rotate: 360 }} transition={{ duration: 80, repeat: Infinity, ease: "linear" }} className="absolute top-0 left-0 w-[100vw] h-[100vw] bg-gradient-to-br from-purple-900/80 to-transparent rounded-full blur-3xl" />
                 <motion.div animate={{ rotate: -360 }} transition={{ duration: 90, repeat: Infinity, ease: "linear" }} className="absolute bottom-0 right-0 w-[100vw] h-[100vw] bg-gradient-to-tl from-cyan-900/60 to-transparent rounded-full blur-3xl" />
             </div>
 
             <main className="max-w-7xl relative mx-auto px-4 pt-32 pb-20">
-                <motion.div 
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="text-center mb-16"
-                >
+                <motion.div {...headerAnimation} className="text-center mb-16">
                     <h1 className="text-5xl sm:text-6xl font-chewy bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400">
                         Regulamin Lekcji
                     </h1>
-                    <p className="mt-4 text-purple-200/70 font-sans">Ostatnia aktualizacja: 23 czerwca 2024 r.</p>
+                    <p className="mt-4 text-purple-200/70 font-sans">Ostatnia aktualizacja: 26 czerwca 2025 r.</p>
                 </motion.div>
 
                 <div className="grid lg:grid-cols-4 gap-8 lg:gap-12">
                     <aside className="hidden lg:block lg:col-span-1">
-                        <motion.div 
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.5, delay: 0.2 }}
-                            className="sticky top-24 p-6 rounded-2xl bg-slate-800/50 border border-purple-500/20 backdrop-blur-sm"
-                        >
+                        <motion.div {...sidebarAnimation} className="sticky top-24 p-6 rounded-2xl bg-slate-800/50 border border-purple-500/20 backdrop-blur-sm">
                             <h3 className="font-chewy text-xl mb-4">Spis treści</h3>
                             <ul className="space-y-2 font-sans">
                                 {sections.map((section) => (
@@ -97,12 +109,7 @@ export default function RegulaminPage() {
                         </motion.div>
                     </aside>
 
-                    <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.5, delay: 0.4 }}
-                        className="lg:col-span-3 space-y-12 font-sans"
-                    >
+                    <motion.div {...contentAnimation} className="lg:col-span-3 space-y-12 font-sans">
                         {sections.map((section) => (
                             <article key={section.id} id={section.id} className="scroll-mt-24">
                                 <h2 className="text-3xl font-chewy text-cyan-300 border-b border-cyan-500/20 pb-2 mb-4">

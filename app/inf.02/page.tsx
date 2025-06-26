@@ -1,14 +1,17 @@
+// FILE: app/inf02/page.tsx
+
 "use client";
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { FiArrowRight, FiCpu, FiServer, FiGlobe } from 'react-icons/fi';
+import { useIsMobile } from '@/lib/useIsMobile'; // KROK 1: Import
 
-// Możesz umieścić ten komponent w osobnym pliku, np. /app/inf02/page.tsx
 export default function Inf02Page() {
     const [routeLoading, startTransition] = useTransition();
     const router = useRouter();
+    const isMobile = useIsMobile(); // KROK 2: Użycie hooka
 
     const changeRoute = (route: string) => {
         startTransition(() => {
@@ -19,44 +22,32 @@ export default function Inf02Page() {
 
     const containerVariants = {
         hidden: { opacity: 0 },
-        visible: { opacity: 1, transition: { staggerChildren: 0.2, duration: 0.5 } },
+        // KROK 3: Warunkowa animacja
+        visible: { opacity: 1, transition: { staggerChildren: isMobile ? 0 : 0.2, duration: 0.5 } },
     };
 
     const itemVariants = {
-        hidden: { opacity: 0, y: 20 },
+        hidden: isMobile ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 },
         visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
     };
 
     const teachingMethods = [
-        { 
-            icon: <FiServer />, 
-            title: "Wirtualne Laboratorium", 
-            text: "Uczymy się w specjalnie przygotowanym środowisku na VirtualBoxie. Masz dostęp do systemów i narzędzi identycznych jak na egzaminie. Ćwiczymy w warunkach, które niczym Cię nie zaskoczą." 
-        },
-        { 
-            icon: <FiCpu />, 
-            title: "Logika, nie Pamięciówka", 
-            text: "Uczę Cię myśleć jak administrator i technik. Zamiast wkuwać definicje, zrozumiesz, dlaczego dana konfiguracja czy polecenie działa w określony sposób." 
-        },
-        { 
-            icon: <FiGlobe />, 
-            title: "Mistrzowie Podsieci (i nie tylko)", 
-            text: "Rozkładam na czynniki pierwsze najtrudniejsze zagadnienia, od adresacji IP i podsieci po specyficzne pytania z Accessa. Tłumaczę tak długo, aż powiesz 'Aha, to takie proste!'" 
-        }
+        { icon: <FiServer />, title: "Wirtualne Laboratorium", text: "Uczymy się w specjalnie przygotowanym środowisku na VirtualBoxie. Masz dostęp do systemów i narzędzi identycznych jak na egzaminie. Ćwiczymy w warunkach, które niczym Cię nie zaskoczą." },
+        { icon: <FiCpu />, title: "Logika, nie Pamięciówka", text: "Uczę Cię myśleć jak administrator i technik. Zamiast wkuwać definicje, zrozumiesz, dlaczego dana konfiguracja czy polecenie działa w określony sposób." },
+        { icon: <FiGlobe />, title: "Mistrzowie Podsieci (i nie tylko)", text: "Rozkładam na czynniki pierwsze najtrudniejsze zagadnienia, od adresacji IP i podsieci po specyficzne pytania z Accessa. Tłumaczę tak długo, aż powiesz 'Aha, to takie proste!'" }
     ];
 
     const topics = ["Systemy Operacyjne", "Sieci Komputerowe", "Bazy Danych (Access)", "Witryny Internetowe (HTML/CSS)", "Urządzenia Techniki Komp.", "Diagnostyka i Naprawa"];
 
     return (
         <div className="w-full bg-slate-900 text-white font-chewy">
-            {/* ===== SEKCJA HERO ===== */}
             <main className="relative w-full min-h-screen flex items-center justify-center overflow-hidden px-4">
-                <div className="absolute inset-0 z-0 opacity-50">
+                <div className="absolute inset-0 z-0 opacity-50 hidden md:block">
                     <motion.div animate={{ rotate: 360 }} transition={{ duration: 60, repeat: Infinity, ease: "linear" }} className="absolute top-[-40%] left-[-20%] w-[70vw] h-[70vw] bg-indigo-700/40 rounded-full blur-3xl" />
                     <motion.div animate={{ rotate: -360 }} transition={{ duration: 70, repeat: Infinity, ease: "linear" }} className="absolute bottom-[-40%] right-[-20%] w-[60vw] h-[60vw] bg-cyan-500/30 rounded-full blur-3xl" />
                 </div>
-                <motion.div variants={containerVariants} initial="hidden" animate="visible" className="grid md:grid-cols-2 gap-8 items-center max-w-7xl mx-auto relative z-10">
-                    <motion.div variants={itemVariants}>
+                <motion.div variants={isMobile ? undefined : containerVariants} initial="hidden" animate="visible" className="grid mt-24 md:mt-0 md:grid-cols-2 gap-8 items-center max-w-7xl mx-auto relative z-10">
+                    <motion.div variants={isMobile ? undefined : itemVariants}>
                         <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black text-white drop-shadow-2xl">
                             INF.02: Z teorią, która ma sens i <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400">praktyką, która działa</span>.
                         </h1>
@@ -64,25 +55,26 @@ export default function Inf02Page() {
                             Koniec z suchą teorią. Przygotuję Cię do egzaminu w środowisku, które wygląda jak prawdziwa pracownia egzaminacyjna. Skupimy się na tym, co naprawdę się liczy, by zdać.
                         </p>
                     </motion.div>
-                    <motion.div variants={itemVariants} className="h-64 md:h-96 flex items-center justify-center relative">
-                        <motion.span initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: [0, 0.5, 0], scale: 1 }} transition={{ duration: 5, repeat: Infinity, delay: 0 }} className="absolute text-7xl text-cyan-400/80 font-sans top-10 left-20">{`{ }`}</motion.span>
-                        <motion.span initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: [0, 0.5, 0], scale: 1 }} transition={{ duration: 5, repeat: Infinity, delay: 1 }} className="absolute text-8xl text-indigo-400/80 font-sans bottom-10 right-20">{`</>`}</motion.span>
-                        <motion.span initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: [0, 0.5, 0], scale: 1 }} transition={{ duration: 5, repeat: Infinity, delay: 2 }} className="absolute text-6xl text-white/80 font-sans top-1/2 left-1/3">{`()`}</motion.span>
+                    <motion.div variants={isMobile ? undefined : itemVariants} className="h-64 md:h-96 flex items-center justify-center relative">
+                        <div className="hidden md:block">
+                            <motion.span initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: [0, 0.5, 0], scale: 1 }} transition={{ duration: 5, repeat: Infinity, delay: 0 }} className="absolute text-7xl text-cyan-400/80 font-sans top-10 left-20">{`{ }`}</motion.span>
+                            <motion.span initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: [0, 0.5, 0], scale: 1 }} transition={{ duration: 5, repeat: Infinity, delay: 1 }} className="absolute text-8xl text-indigo-400/80 font-sans bottom-10 right-20">{`</>`}</motion.span>
+                            <motion.span initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: [0, 0.5, 0], scale: 1 }} transition={{ duration: 5, repeat: Infinity, delay: 2 }} className="absolute text-6xl text-white/80 font-sans top-1/2 left-1/3">{`()`}</motion.span>
+                        </div>
                         <FiServer className="w-40 h-40 text-slate-700/50" />
                     </motion.div>
                 </motion.div>
             </main>
 
-            {/* ===== SEKCJA: MÓJ SYSTEM NAUCZANIA ===== */}
             <section className="py-20 sm:py-32 px-4 relative overflow-hidden">
-                <div className="absolute inset-0 z-0 opacity-20">
+                <div className="absolute inset-0 z-0 opacity-20 hidden md:block">
                     <motion.div initial={{ y: "100%" }} whileInView={{ y: "20%" }} transition={{ duration: 1.5, ease: "easeOut" }} className="absolute -bottom-40 -left-40 w-[60rem] h-[60rem] bg-gradient-to-tr from-cyan-500/50 to-indigo-500/50 rounded-full blur-3xl" />
                 </div>
-                <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }} variants={containerVariants} className="max-w-7xl mx-auto flex flex-col items-center relative z-10">
-                    <motion.h2 variants={itemVariants} className="text-4xl sm:text-5xl md:text-6xl text-center mb-16">Mój system na pewne zdanie INF.02</motion.h2>
+                <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }} variants={isMobile ? undefined : containerVariants} className="max-w-7xl mx-auto flex flex-col items-center relative z-10">
+                    <motion.h2 variants={isMobile ? undefined : itemVariants} className="text-4xl sm:text-5xl md:text-6xl text-center mb-16">Mój system na pewne zdanie INF.02</motion.h2>
                     <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-8">
                         {teachingMethods.map((method, index) => (
-                            <motion.div key={index} variants={itemVariants} className="p-8 rounded-3xl bg-slate-800/50 border border-indigo-500/30 backdrop-blur-sm hover:border-cyan-400 hover:-translate-y-2 transition-all duration-300 flex flex-col items-center text-center">
+                            <motion.div key={index} variants={isMobile ? undefined : itemVariants} className="p-8 rounded-3xl bg-slate-800/50 border border-indigo-500/30 backdrop-blur-sm hover:border-cyan-400 hover:-translate-y-2 transition-all duration-300 flex flex-col items-center text-center">
                                 <div className="p-5 rounded-full bg-slate-700/50 mb-6 text-cyan-400 text-4xl">{method.icon}</div>
                                 <h3 className="text-2xl mb-4 text-white">{method.title}</h3>
                                 <p className="font-sans text-indigo-200/70">{method.text}</p>
@@ -92,17 +84,16 @@ export default function Inf02Page() {
                 </motion.div>
             </section>
 
-            {/* ===== SEKCJA: ZAKRES MATERIAŁU ===== */}
             <section className="py-20 sm:py-32 px-4 relative overflow-hidden">
-                <div className="absolute inset-0 z-0 opacity-15">
+                <div className="absolute inset-0 z-0 opacity-15 hidden md:block">
                     <motion.div initial={{ scale: 0.5 }} whileInView={{ scale: 1 }} transition={{ duration: 1.5, ease: "easeOut" }} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80rem] h-[80rem] bg-orange-600/50 rounded-full blur-3xl" />
                 </div>
                 <div className="max-w-7xl mx-auto flex flex-col items-center relative z-10">
                     <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.6 }} className="text-4xl sm:text-5xl md:text-6xl text-center mb-4">Co <span className="bg-clip-text text-transparent bg-gradient-to-r from-yellow-400 to-orange-500">zdasz</span> bez problemu?</motion.h2>
                     <motion.p initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.6, delay: 0.1 }} className="text-purple-200/70 font-sans text-lg max-w-2xl text-center mb-16">Skupiamy się w 100% na zagadnieniach wymaganych na egzaminie INF.02 (dawne EE.08). Zero lania wody, maksimum konkretów, które pojawią się na arkuszu.</motion.p>
-                    <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }} variants={containerVariants} className="w-full grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
+                    <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }} variants={isMobile ? undefined : containerVariants} className="w-full grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
                         {topics.map((topic) => (
-                            <motion.div key={topic} variants={itemVariants} className="p-6 text-center rounded-2xl bg-slate-800/50 border border-indigo-500/20 backdrop-blur-sm cursor-pointer hover:bg-indigo-500/20 transition-colors">
+                            <motion.div key={topic} variants={isMobile ? undefined : itemVariants} className="p-6 text-center rounded-2xl bg-slate-800/50 border border-indigo-500/20 backdrop-blur-sm cursor-pointer hover:bg-indigo-500/20 transition-colors">
                                 <p className="text-lg sm:text-xl">{topic}</p>
                             </motion.div>
                         ))}
@@ -110,7 +101,6 @@ export default function Inf02Page() {
                 </div>
             </section>
 
-            {/* ===== NOWA SEKCJA: INTERAKTYWNE ZADANIE (SUBNETTING) ===== */}
             <section className="py-20 sm:py-32 px-4">
                 <div className="max-w-4xl mx-auto text-center">
                     <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.6 }} className="text-4xl sm:text-5xl md:text-6xl mb-4">Zobacz, jak łamię zadanie na bity.</motion.h2>
@@ -147,9 +137,8 @@ export default function Inf02Page() {
                 </div>
             </section>
 
-            {/* ===== SEKCJA: FINALNE CTA ===== */}
             <section className="py-20 sm:py-32 px-4 relative overflow-hidden">
-                <div className="absolute inset-0 z-0 opacity-30">
+                <div className="absolute inset-0 z-0 opacity-30 hidden md:block">
                     <motion.div initial={{ scale: 1.5 }} whileInView={{ scale: 1 }} transition={{ duration: 1.5, ease: "easeOut" }} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[50rem] h-[50rem] bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500 rounded-full blur-3xl" />
                 </div>
                 <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.8 }} className="max-w-3xl mx-auto text-center relative z-10">

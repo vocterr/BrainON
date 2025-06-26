@@ -1,11 +1,15 @@
+// FILE: app/jak-to-dziala/page.tsx
+
 "use client";
 
 import { motion } from 'framer-motion';
 import { FiCalendar, FiCreditCard, FiVideo, FiArrowRight } from 'react-icons/fi';
 import { useRouter } from 'next/navigation';
+import { useIsMobile } from '@/lib/useIsMobile'; // KROK 1: Import
 
 export default function JakToDzialaPage() {
     const router = useRouter();
+    const isMobile = useIsMobile(); // KROK 2: Użycie hooka
 
     const steps = [
         {
@@ -28,10 +32,32 @@ export default function JakToDzialaPage() {
         }
     ];
 
+    // KROK 3: Definicja prostszych animacji dla urządzeń mobilnych
+    const mobileAnimationProps = {
+        initial: { opacity: 1, x: 0 },
+        whileInView: { opacity: 1, x: 0 },
+        viewport: { once: true, amount: 0.5 },
+        transition: { duration: 0 }
+    };
+
+    const desktopAnimationProps = {
+        initial: { opacity: 0, x: -20 },
+        whileInView: { opacity: 1, x: 0 },
+        viewport: { once: true, amount: 0.5 },
+        transition: { duration: 0.5 }
+    };
+    
+    const desktopVisualAnimationProps = {
+        initial:{ opacity: 0, scale: 0.8 },
+        whileInView:{ opacity: 1, scale: 1 },
+        viewport:{ once: true, amount: 0.8 },
+        transition:{ duration: 0.6, delay: 0.2 }
+    };
+
+
     return (
         <div className="relative w-full min-h-screen bg-slate-900 text-white font-chewy overflow-x-hidden">
-            {/* Tło Aurora Glow */}
-            <div className="absolute inset-0 z-0 opacity-30">
+            <div className="absolute inset-0 z-0 opacity-30 hidden md:block">
                 <motion.div animate={{ x: ['-5%', '5%', '-5%'], y: ['-10%', '10%', '-10%'] }} transition={{ duration: 80, repeat: Infinity, ease: "linear" }} className="absolute top-[-50%] right-[-50%] w-[120rem] h-[120rem] bg-purple-600/40 rounded-full blur-3xl" />
                 <motion.div animate={{ x: ['5%', '-5%', '5%'], y: ['10%', '-10%', '10%'] }} transition={{ duration: 90, repeat: Infinity, ease: "linear" }} className="absolute bottom-[-50%] left-[-50%] w-[120rem] h-[120rem] bg-orange-500/30 rounded-full blur-3xl" />
             </div>
@@ -45,17 +71,14 @@ export default function JakToDzialaPage() {
                 </motion.div>
 
                 <div className="grid lg:grid-cols-2 gap-16 items-center">
-                    {/* Lewa kolumna: Kroki */}
                     <div className="relative">
                         <div className="absolute left-6 top-6 bottom-6 w-0.5 bg-slate-700/50"></div>
                         <div className="flex flex-col gap-16">
                             {steps.map((step, index) => (
                                 <motion.div
                                     key={index}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    whileInView={{ opacity: 1, x: 0 }}
-                                    viewport={{ once: true, amount: 0.5 }}
-                                    transition={{ duration: 0.5 }}
+                                    // KROK 4: Zastosowanie warunkowych animacji
+                                    {...(isMobile ? mobileAnimationProps : desktopAnimationProps)}
                                     className="flex gap-6 items-start"
                                 >
                                     <div className="relative z-10 flex-shrink-0 flex flex-col items-center">
@@ -75,24 +98,19 @@ export default function JakToDzialaPage() {
                         </div>
                     </div>
 
-                    {/* Prawa kolumna: Wizualizacje */}
                     <div className="hidden lg:block h-[600px] sticky top-24">
                         {steps.map((step, index) => (
-                             <motion.div
-                                key={index}
-                                initial={{ opacity: 0, scale: 0.8 }}
-                                whileInView={{ opacity: 1, scale: 1 }}
-                                viewport={{ once: true, amount: 0.8 }}
-                                transition={{ duration: 0.6, delay: 0.2 }}
-                                className="absolute inset-0 flex items-center justify-center"
-                            >
-                                {step.visual}
-                            </motion.div>
+                                <motion.div
+                                    key={index}
+                                    {...desktopVisualAnimationProps}
+                                    className="absolute inset-0 flex items-center justify-center"
+                                >
+                                    {step.visual}
+                                </motion.div>
                         ))}
                     </div>
                 </div>
 
-                {/* Finalne CTA */}
                  <motion.div 
                     initial={{ opacity: 0 }}
                     whileInView={{ opacity: 1 }}
@@ -111,14 +129,11 @@ export default function JakToDzialaPage() {
                         Zarezerwuj swoją pierwszą lekcję <FiArrowRight />
                     </motion.button>
                 </motion.div>
-
             </main>
         </div>
     );
 }
 
-
-// Komponenty wizualizacji dla każdego kroku
 const CalendarVisual = () => (
     <div className="w-80 h-64 p-4 bg-slate-800/50 rounded-2xl border border-purple-500/30 backdrop-blur-sm">
         <div className="w-full h-full border-2 border-dashed border-slate-700 rounded-lg flex flex-col p-2 gap-2">

@@ -7,11 +7,12 @@ import { signIn } from "next-auth/react";
 import { FiMail, FiLock, FiLoader } from 'react-icons/fi';
 import { FcGoogle } from 'react-icons/fc';
 import Link from 'next/link';
+import { useIsMobile } from '@/lib/useIsMobile'; // Załóżmy, że hook jest w tej lokalizacji
 
-// KROK 1: Cała logika formularza została przeniesiona do osobnego komponentu klienta.
 const LoginForm = () => {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const isMobile = useIsMobile();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -55,20 +56,26 @@ const LoginForm = () => {
         signIn('google', { callbackUrl: '/' });
     };
 
+    const containerVariants = {
+        hidden: { opacity: 0, scale: 0.95 },
+        visible: { 
+            opacity: 1, 
+            scale: 1,
+            transition: { staggerChildren: isMobile ? 0 : 0.1, duration: 0.4 } 
+        },
+    };
+
     const itemVariants = {
-        hidden: { opacity: 0, y: 20 },
+        hidden: isMobile ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 },
         visible: { opacity: 1, y: 0, transition: { duration: 0.4 } },
     };
 
     return (
         <motion.div 
-            variants={{
-                hidden: { opacity: 0, scale: 0.95 },
-                visible: { opacity: 1, scale: 1, transition: { staggerChildren: 0.1, duration: 0.4 } },
-            }} 
+            variants={containerVariants} 
             initial="hidden" 
             animate="visible" 
-            className="w-full max-w-md p-8 sm:p-12 rounded-3xl bg-slate-800/50 border border-purple-500/30 backdrop-blur-lg shadow-2xl relative z-10"
+            className="w-full max-w-md p-8 sm:p-12 rounded-3xl bg-slate-800/50 border border-purple-500/30 backdrop-blur-lg shadow-2xl relative top-20 md:top-0 z-10"
         >
             <motion.div variants={itemVariants} className="text-center mb-8">
                 <h1 className="text-5xl bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-500 mb-2">Witaj z powrotem!</h1>
@@ -106,20 +113,22 @@ const LoginForm = () => {
                     )}
                 </motion.button>
             </form>
+
+            {/* ===== DODANY LINK DO REJESTRACJI ===== */}
             <motion.p variants={itemVariants} className="text-center mt-8 font-sans text-sm text-slate-400">
                 Nie masz jeszcze konta?{' '}
-                <Link href="/rejestracja" className="font-bold text-purple-300 hover:underline">Zarejestruj się</Link>
+                <Link href="/rejestracja" className="font-bold text-purple-300 hover:underline">
+                    Zarejestruj się
+                </Link>
             </motion.p>
         </motion.div>
     );
 }
 
-// KROK 2: Główny komponent strony, który eksportujemy.
-// Jego jedynym zadaniem jest renderowanie tła i opakowanie formularza w <Suspense>.
 export default function LoginPage() {
     return (
-        <main className="w-full min-h-screen flex items-center justify-center bg-slate-900 text-white font-chewy p-4 relative overflow-hidden">
-            <div className="absolute inset-0 z-0 opacity-40">
+        <main className="w-full min-h-screen flex items-center justify-center bg-slate-900 text-white font-chewy p-4 relative">
+            <div className="absolute inset-0 z-0 opacity-40 hidden md:block">
                 <motion.div animate={{ rotate: 360 }} transition={{ duration: 50, repeat: Infinity, ease: "linear" }} className="absolute top-[-50%] left-[-50%] w-[150vw] h-[150vw] bg-gradient-to-br from-purple-800/80 via-indigo-700/60 to-pink-700/40 rounded-full blur-3xl" />
             </div>
             <Suspense fallback={<div className="w-12 h-12"><FiLoader className="w-full h-full animate-spin"/></div>}>

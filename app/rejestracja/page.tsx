@@ -1,13 +1,19 @@
+// FILE: app/rejestracja/page.tsx
+
 "use client";
 
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useState, FormEvent } from 'react';
 import { FiUser, FiMail, FiLock, FiLoader } from 'react-icons/fi';
-import { FcGoogle } from 'react-icons/fc'; // Ikona Google
+import { FcGoogle } from 'react-icons/fc';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useIsMobile } from '@/lib/useIsMobile'; // KROK 1: Import
 
 export default function RegisterPage() {
     const router = useRouter();
+    const isMobile = useIsMobile(); // KROK 2: Użycie hooka
+    
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -16,102 +22,77 @@ export default function RegisterPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // W przyszłości użyjesz tu logiki do rejestracji użytkownika
     const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    // Prosta walidacja po stronie klienta
-    if (password !== confirmPassword) {
-        setError("Hasła nie są identyczne.");
-        return;
-    }
-    if (!agreedToTerms) {
-        setError("Musisz zaakceptować regulamin.");
-        return;
-    }
-    
-    setIsLoading(true);
-    setError('');
-
-    // Używamy bloku try...catch...finally do profesjonalnej obsługi żądania
-    try {
-        // KROK 1: Wysyłamy żądanie do naszego API
-        const res = await fetch('/api/register', {
-            method: 'POST', // Używamy metody POST, ponieważ tworzymy nowego użytkownika
-            headers: {
-                'Content-Type': 'application/json', // Informujemy serwer, że wysyłamy dane w formacie JSON
-            },
-            body: JSON.stringify({ // Konwertujemy nasz obiekt JavaScript na tekst w formacie JSON
-                name: name,
-                email: email,
-                password: password,
-            }),
-        });
-
-        // KROK 2: Sprawdzamy odpowiedź od serwera
-        if (res.ok) {
-            // Jeśli status odpowiedzi to 2xx (np. 201 Created), to znaczy, że wszystko się udało
-            console.log("Rejestracja pomyślna!");
-            // Po udanej rejestracji, przekierowujemy użytkownika na stronę logowania
-            router.push('/login');
-        } else {
-            // Jeśli serwer zwrócił błąd (np. 409 Conflict, bo email już istnieje)
-            // Odczytujemy treść błędu z odpowiedzi
-            const errorData = await res.json();
-            setError(errorData.message || 'Wystąpił błąd podczas rejestracji.');
+        e.preventDefault();
+        if (password !== confirmPassword) {
+            setError("Hasła nie są identyczne.");
+            return;
         }
-
-    } catch (error) {
-        // KROK 3: Obsługa błędów sieciowych
-        console.error("Błąd sieci lub fetch:", error);
-        setError('Nie udało się połączyć z serwerem. Spróbuj ponownie później.');
-    } finally {
-        // KROK 4: Zawsze wyłączamy stan ładowania na końcu
-        setIsLoading(false);
-    }
-};
-    
-    const handleGoogleRegister = async () => {
+        if (!agreedToTerms) {
+            setError("Musisz zaakceptować regulamin.");
+            return;
+        }
+        
         setIsLoading(true);
         setError('');
-        console.log("Rejestracja z Google...");
-        // Tutaj wywołasz signIn('google') z Next-Auth
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        setIsLoading(false);
-    };
 
+        try {
+            const res = await fetch('/api/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, password }),
+            });
+
+            if (res.ok) {
+                router.push('/login');
+            } else {
+                const errorData = await res.json();
+                setError(errorData.message || 'Wystąpił błąd podczas rejestracji.');
+            }
+        } catch (error) {
+            setError('Nie udało się połączyć z serwerem. Spróbuj ponownie później.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
+    const handleGoogleRegister = async () => {
+        // Logika logowania przez Google
+    };
+    
+    // KROK 3: Warunkowe animacje
     const containerVariants = {
         hidden: { opacity: 0, scale: 0.95 },
         visible: { 
             opacity: 1, 
             scale: 1,
+            transition: { staggerChildren: isMobile ? 0 : 0.08 }
         },
     };
 
     const itemVariants = {
-        hidden: { opacity: 0, y: 20 },
+        hidden: isMobile ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 },
         visible: { opacity: 1, y: 0},
     };
 
     return (
-        <main className="w-full min-h-screen flex items-center justify-center bg-slate-900 text-white font-chewy p-4 relative overflow-hidden">
-            {/* Tło "Aurora Glow" */}
-            <div className="absolute inset-0 z-0 opacity-40">
+        <main className="w-full min-h-screen flex items-center justify-center bg-slate-900 text-white font-chewy p-4 relative top-20 md:top-0 overflow-hidden">
+            <div className="absolute inset-0 z-0 opacity-40 hidden md:block">
                 <motion.div animate={{ rotate: 360 }} transition={{ duration: 50, repeat: Infinity, ease: "linear" }} className="absolute top-[-50%] left-[-50%] w-[150vw] h-[150vw] bg-gradient-to-br from-purple-800/80 via-indigo-700/60 to-cyan-700/40 rounded-full blur-3xl" />
             </div>
 
             <motion.div
+                // KROK 4: Zastosowanie warunkowych animacji
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
-                className="w-full max-w-md p-8 sm:p-12 sm:py-8 rounded-3xl bg-slate-800/50 border border-purple-500/30 backdrop-blur-lg shadow-2xl relative top-16 sm:top-8 z-10"
+                className="w-full max-w-md p-8 sm:p-12 sm:py-8 rounded-3xl bg-slate-800/50 border border-purple-500/30 backdrop-blur-lg shadow-2xl relative z-10"
             >
-                {/* Nagłówek */}
                 <motion.div variants={itemVariants} className="text-center mb-8">
                     <h1 className="text-5xl bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400 mb-2">Dołącz do korki24.pl</h1>
                     <p className="font-sans text-purple-200/70">Stwórz konto i odblokuj swój potencjał.</p>
                 </motion.div>
 
-                {/* Logowanie z Google */}
                 <motion.button
                     variants={itemVariants}
                     onClick={handleGoogleRegister}
@@ -124,14 +105,12 @@ export default function RegisterPage() {
                     <span className="font-sans font-semibold text-white">Zarejestruj się z Google</span>
                 </motion.button>
 
-                {/* Dzielnik */}
                 <motion.div variants={itemVariants} className="flex items-center gap-4 mb-6">
                     <hr className="w-full border-slate-700" />
                     <span className="text-slate-500 font-sans text-xs">LUB</span>
                     <hr className="w-full border-slate-700" />
                 </motion.div>
 
-                {/* Formularz Rejestracji */}
                 <form onSubmit={handleSubmit} className="flex flex-col gap-5">
                     <motion.div variants={itemVariants} className="relative font-sans flex items-center">
                         <FiUser className="absolute left-4 text-slate-500" />
@@ -153,7 +132,7 @@ export default function RegisterPage() {
                     <motion.div variants={itemVariants} className="flex items-center gap-3 font-sans text-sm">
                         <input type="checkbox" id="terms" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} className="h-4 w-4 accent-purple-500"/>
                         <label htmlFor="terms" className="text-slate-400">
-                            Akceptuję <a href="/regulamin" className="text-purple-300 hover:underline">regulamin</a> serwisu.
+                            Akceptuję <Link href="/regulamin" className="text-purple-300 hover:underline">regulamin</Link> serwisu.
                         </label>
                     </motion.div>
                     
@@ -177,10 +156,9 @@ export default function RegisterPage() {
                     </motion.button>
                 </form>
 
-                {/* Link do logowania */}
                 <motion.p variants={itemVariants} className="text-center mt-8 font-sans text-sm text-slate-400">
                     Masz już konto?{' '}
-                    <a href="/login" className="font-bold text-purple-300 hover:underline">Zaloguj się</a>
+                    <Link href="/login" className="font-bold text-purple-300 hover:underline">Zaloguj się</Link>
                 </motion.p>
             </motion.div>
         </main>

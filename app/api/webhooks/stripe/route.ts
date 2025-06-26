@@ -33,14 +33,10 @@ export async function POST(request: Request) {
             return new NextResponse('Brak metadanych w sesji.', { status: 400 });
         }
         
-        // Wyciągamy dane, które zapisaliśmy w metadanych podczas tworzenia sesji
         const { studentId, date, subject, type, price, notes } = metadata;
-        
-        // W przyszłości możesz tu znaleźć ID admina dynamicznie, teraz na stałe
         const adminId = process.env.ADMINID as string;
 
         try {
-            // Tworzymy nowy termin w bazie danych
             await prisma.appointment.create({
                 data: {
                     studentId: studentId,
@@ -48,12 +44,13 @@ export async function POST(request: Request) {
                     date: new Date(date),
                     subject: subject as any,
                     type: type as any,
-                    price: parseInt(price),
+                    price: parseInt(price), // Cena już jest w groszach z checkout session
                     notes: notes,
                     status: 'UPCOMING',
+                    paymentStatus: 'PAID' // <--- DODAJ TĘ LINIĘ
                 }
             });
-            console.log("✅ Pomyślnie zapisano rezerwację w bazie danych.");
+            console.log("✅ Pomyślnie zapisano rezerwację (opłaconą przez Stripe).");
         } catch (dbError) {
             console.error("Błąd zapisu do bazy danych:", dbError);
             return new NextResponse('Błąd serwera podczas zapisu rezerwacji.', { status: 500 });

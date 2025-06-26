@@ -1,13 +1,17 @@
+// FILE: app/matematyka/page.tsx
+
 "use client";
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { FiArrowRight, FiCheckCircle, FiBarChart2, FiCpu } from 'react-icons/fi';
+import { useIsMobile } from '@/lib/useIsMobile'; // KROK 1: Import
 
 export default function MatematykaPage() {
     const [routeLoading, startTransition] = useTransition();
     const router = useRouter();
+    const isMobile = useIsMobile(); // KROK 2: Użycie hooka
 
     const changeRoute = (route: string) => {
         startTransition(() => {
@@ -16,46 +20,35 @@ export default function MatematykaPage() {
     }
     const [isSolved, setIsSolved] = useState(false);
 
+    // KROK 3: Warunkowa animacja
     const containerVariants = {
         hidden: { opacity: 0 },
-        visible: { opacity: 1, transition: { staggerChildren: 0.2, duration: 0.5 } },
+        visible: { opacity: 1, transition: { staggerChildren: isMobile ? 0 : 0.2, duration: 0.5 } },
     };
 
     const itemVariants = {
-        hidden: { opacity: 0, y: 20 },
+        hidden: isMobile ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 },
         visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
     };
 
     const teachingMethods = [
-        {
-            icon: <FiCpu />,
-            title: "Myślenie, nie Wkuwanie",
-            text: "Nie będziemy bezmyślnie powtarzać regułek. Nauczę Cię zadawać właściwe pytania i samodzielnie dochodzić do odpowiedzi. Kiedy zrozumiesz 'dlaczego', każde 'jak' stanie się proste."
-        },
-        {
-            icon: <FiBarChart2 />,
-            title: "Logika Programisty w Zadaniach",
-            text: "Jako programista, podchodzę do problemów systemowo. Pokażę Ci, jak 'debugować' swoje błędy w myśleniu i rozbijać najtrudniejsze zadania na małe, zrozumiałe części."
-        },
-        {
-            icon: <FiCheckCircle />,
-            title: "Atmosfera Stoickiego Spokoju",
-            text: "Zero presji, zero oceniania. U mnie możesz pytać o wszystko, nawet o podstawy. Tworzymy bezpieczną przestrzeń, gdzie liczy się Twój komfort i realny postęp, a nie wyścig z czasem."
-        }
+        { icon: <FiCpu />, title: "Myślenie, nie Wkuwanie", text: "Nie będziemy bezmyślnie powtarzać regułek. Nauczę Cię zadawać właściwe pytania i samodzielnie dochodzić do odpowiedzi. Kiedy zrozumiesz 'dlaczego', każde 'jak' stanie się proste." },
+        { icon: <FiBarChart2 />, title: "Logika Programisty w Zadaniach", text: "Jako programista, podchodzę do problemów systemowo. Pokażę Ci, jak 'debugować' swoje błędy w myśleniu i rozbijać najtrudniejsze zadania na małe, zrozumiałe części." },
+        { icon: <FiCheckCircle />, title: "Atmosfera Stoickiego Spokoju", text: "Zero presji, zero oceniania. U mnie możesz pytać o wszystko, nawet o podstawy. Tworzymy bezpieczną przestrzeń, gdzie liczy się Twój komfort i realny postęp, a nie wyścig z czasem." }
     ];
 
     const topics = ["Funkcje i ich własności", "Geometria analityczna", "Planimetria i stereometria", "Rachunek prawdopodobieństwa", "Ciągi liczbowe", "Trygonometria", "Logika i zbiory", "Optymalizacja"];
 
     return (
         <div className="w-full bg-slate-900 text-white font-chewy">
-            {/* ===== SEKCJA HERO ===== */}
             <main className="relative w-full min-h-screen flex items-center justify-center overflow-hidden px-4">
-                <div className="absolute inset-0 z-0 opacity-50">
+                <div className="absolute inset-0 z-0 opacity-50 hidden md:block">
                     <motion.div animate={{ rotate: 360 }} transition={{ duration: 60, repeat: Infinity, ease: "linear" }} className="absolute top-[-40%] left-[-20%] w-[70vw] h-[70vw] bg-purple-700/40 rounded-full blur-3xl" />
                     <motion.div animate={{ rotate: -360 }} transition={{ duration: 70, repeat: Infinity, ease: "linear" }} className="absolute bottom-[-40%] right-[-20%] w-[60vw] h-[60vw] bg-pink-500/30 rounded-full blur-3xl" />
                 </div>
-                <motion.div variants={containerVariants} initial="hidden" animate="visible" className="grid md:grid-cols-2 gap-8 items-center max-w-7xl mx-auto relative z-10">
-                    <motion.div variants={itemVariants}>
+                {/* KROK 4: Zastosowanie warunkowych animacji */}
+                <motion.div variants={isMobile ? undefined : containerVariants} initial="hidden" animate="visible" className="grid mt-24 md:mt-0 md:grid-cols-2 gap-8 items-center max-w-7xl mx-auto relative z-10">
+                    <motion.div variants={isMobile ? undefined : itemVariants}>
                         <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black text-white drop-shadow-2xl">
                             Matematyka, z którą wreszcie <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-500">się dogadasz</span>.
                         </h1>
@@ -63,8 +56,8 @@ export default function MatematykaPage() {
                             Pamiętam, jak pomogłem koledze, który z jedynkowicza stał się czwórkowiczem. To nie magia. To pokazanie, że każdy problem to logiczna łamigłówka, którą możemy razem, w bezstresowej atmosferze rozwiązać.
                         </p>
                     </motion.div>
-                    <motion.div variants={itemVariants} className="h-64 md:h-96 flex items-center justify-center">
-                        <svg className="w-full h-full" viewBox="0 0 400 200">
+                    <motion.div variants={isMobile ? undefined : itemVariants} className="h-64 md:h-96 flex items-center justify-center">
+                        <svg className="w-full h-full hidden md:block" viewBox="0 0 400 200">
                             <motion.path
                                 d="M 10 100 C 50 10, 150 190, 200 100 S 350 10, 390 100"
                                 fill="none"
@@ -86,16 +79,15 @@ export default function MatematykaPage() {
                 </motion.div>
             </main>
 
-            {/* ===== SEKCJA: MOJE METODY NAUCZANIA ===== */}
             <section className="py-20 sm:py-32 px-4 relative overflow-hidden">
-                <div className="absolute inset-0 z-0 opacity-30">
+                <div className="absolute inset-0 z-0 opacity-30 hidden md:block">
                     <motion.div initial={{ scale: 1 }} whileInView={{ scale: 1.5 }} transition={{ duration: 1.5, ease: "easeOut" }} className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[50rem] h-[50rem] bg-gradient-to-r from-pink-500 via-indigo-500 to-purple-500 rounded-full blur-3xl" />
                 </div>
-                <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }} variants={containerVariants} className="max-w-7xl mx-auto flex flex-col items-center relative z-10">
-                    <motion.h2 variants={itemVariants} className="text-4xl sm:text-5xl md:text-6xl text-center mb-16">Jak uczę? Oto mój przepis na sukces.</motion.h2>
+                <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }} variants={isMobile ? undefined : containerVariants} className="max-w-7xl mx-auto flex flex-col items-center relative z-10">
+                    <motion.h2 variants={isMobile ? undefined : itemVariants} className="text-4xl sm:text-5xl md:text-6xl text-center mb-16">Jak uczę? Oto mój przepis na sukces.</motion.h2>
                     <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-8">
                         {teachingMethods.map((method, index) => (
-                            <motion.div key={index} variants={itemVariants} className="p-8 rounded-3xl bg-slate-800/50 border border-purple-500/30 backdrop-blur-sm hover:border-pink-400 hover:-translate-y-2 transition-all duration-300 flex flex-col items-center text-center">
+                            <motion.div key={index} variants={isMobile ? undefined : itemVariants} className="p-8 rounded-3xl bg-slate-800/50 border border-purple-500/30 backdrop-blur-sm hover:border-pink-400 hover:-translate-y-2 transition-all duration-300 flex flex-col items-center text-center">
                                 <div className="p-5 rounded-full bg-slate-700/50 mb-6 text-pink-400 text-4xl">{method.icon}</div>
                                 <h3 className="text-2xl mb-4 text-white">{method.title}</h3>
                                 <p className="font-sans text-purple-200/70">{method.text}</p>
@@ -105,9 +97,8 @@ export default function MatematykaPage() {
                 </motion.div>
             </section>
             
-            {/* ===== SEKCJA: ZAKRES MATERIAŁU ===== */}
             <section className="py-20 sm:py-32 px-4 relative overflow-hidden">
-                <div className="absolute inset-0 z-0 opacity-15">
+                <div className="absolute inset-0 z-0 opacity-15 hidden md:block">
                     <motion.div initial={{ scale: 0.5 }} whileInView={{ scale: 1 }} transition={{ duration: 1.5, ease: "easeOut" }} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80rem] h-[80rem] bg-yellow-600/50 rounded-full blur-3xl" />
                 </div>
                 <div className="max-w-7xl mx-auto flex flex-col items-center relative z-10">
@@ -115,9 +106,9 @@ export default function MatematykaPage() {
                     <motion.p initial={{opacity: 0, y: 20}} whileInView={{opacity: 1, y: 0}} viewport={{once: true, amount: 0.2}} transition={{duration: 0.6, delay: 0.1}} className="text-purple-200/70 font-sans text-lg max-w-2xl text-center mb-16">
                         Skupiamy się na solidnych fundamentach, które są kluczem do sukcesu na każdym etapie – od szkoły podstawowej po liceum. Poniższe działy to nasza baza wypadowa do budowania Twojej pewności siebie. (Przygotowanie do matury wkrótce w ofercie!)
                     </motion.p>
-                    <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }} variants={containerVariants} className="w-full grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+                    <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }} variants={isMobile ? undefined : containerVariants} className="w-full grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
                         {topics.map((topic) => (
-                            <motion.div key={topic} variants={itemVariants} className="p-6 text-center rounded-2xl bg-slate-800/50 border border-purple-500/20 backdrop-blur-sm cursor-pointer hover:bg-purple-500/20 transition-colors">
+                            <motion.div key={topic} variants={isMobile ? undefined : itemVariants} className="p-6 text-center rounded-2xl bg-slate-800/50 border border-purple-500/20 backdrop-blur-sm cursor-pointer hover:bg-purple-500/20 transition-colors">
                                 <p className="text-lg sm:text-xl">{topic}</p>
                             </motion.div>
                         ))}
@@ -125,9 +116,8 @@ export default function MatematykaPage() {
                 </div>
             </section>
 
-            {/* ===== SEKCJA: INTERAKTYWNE ZADANIE ===== */}
             <section className="py-20 sm:py-32 px-4 relative overflow-hidden">
-                <div className="absolute inset-0 z-0 opacity-25">
+                <div className="absolute inset-0 z-0 opacity-25 hidden md:block">
                     <motion.div initial={{ y: "50%" }} whileInView={{ y: 0 }} transition={{ duration: 1.5, ease: "easeOut" }} className="absolute -bottom-1/2 left-1/2 -translate-x-1/2 w-[100rem] h-[50rem] bg-gradient-to-t from-indigo-600/50 to-transparent rounded-t-full blur-3xl" />
                 </div>
                 <div className="max-w-4xl mx-auto text-center relative z-10">
@@ -142,20 +132,18 @@ export default function MatematykaPage() {
                             {isSolved && (
                                 <motion.div initial={{opacity: 0, y: 20}} animate={{opacity: 1, y: 0}} exit={{opacity: 0}}>
                                     <p className="mb-2 text-xl font-chewy text-green-400">Rozwiązanie krok po kroku:</p>
-                                    <p className="mb-2"><span className="text-green-400 font-bold">1. Oznaczmy sobie:</span>{` Niech `}<span className="text-yellow-400">x</span>{` to część drutu na kwadrat, a `}<span className="text-yellow-400">100-x</span>{` to część na okrąg.`}</p>
-                                    
-                                    {/* ===== POPRAWIONE LINIE Z LATEX ===== */}
+                                    <p className="mb-2"><span className="text-green-400 font-bold">1. Oznaczmy sobie:</span> Niech <span className="text-yellow-400">x</span> to część drutu na kwadrat, a <span className="text-yellow-400">100-x</span> to część na okrąg.</p>
                                     <p className="mb-2">
                                         <span className="text-green-400 font-bold">2. Wzory na pola:</span>
-                                        {` Bok kwadratu to $a = \\frac{x}{4}$, więc jego pole $P_k = (\\frac{x}{4})^2$. Obwód okręgu to $2\\pi r = 100-x$, czyli promień $r = \\frac{100-x}{2\\pi}$. Pole koła $P_o = \\pi r^2 = \\pi (\\frac{100-x}{2\\pi})^2$.`}
+                                        {` Bok kwadratu to a = x/4, więc jego pole Pk = (x/4)². Obwód okręgu to 2πr = 100-x, czyli promień r = (100-x)/(2π). Pole koła Po = πr² = π((100-x)/(2π))².`}
                                     </p>
                                     <p className="mb-2">
                                         <span className="text-green-400 font-bold">3. Funkcja sumy pól:</span>
-                                        {` Sumujemy oba pola, by stworzyć funkcję, którą będziemy optymalizować: $S(x) = \\frac{x^2}{16} + \\frac{(100-x)^2}{4\\pi}$.`}
+                                        {` Sumujemy oba pola, by stworzyć funkcję, którą będziemy optymalizować: S(x) = x²/16 + (100-x)²/(4π).`}
                                     </p>
                                     <p className="mb-4">
                                         <span className="text-green-400 font-bold">4. Pochodna i minimum:</span>
-                                        {` Szukamy minimum tej funkcji. Liczymy pochodną $S'(x)$, przyrównujemy ją do zera i rozwiązujemy. Otrzymujemy optymalną wartość `}<span className="text-yellow-400">x ≈ 56</span>{` cm.`}
+                                        {` Szukamy minimum tej funkcji. Liczymy pochodną S'(x), przyrównujemy ją do zera i rozwiązujemy. Otrzymujemy optymalną wartość `}<span className="text-yellow-400">x ≈ 56</span>{` cm.`}
                                     </p>
                                     <p className="text-lg font-bold text-white">Odpowiedź: Aby suma pól była najmniejsza, na kwadrat trzeba wziąć ok. 56 cm drutu, a na okrąg resztę, czyli ok. 44 cm.</p>
                                 </motion.div>
@@ -170,9 +158,8 @@ export default function MatematykaPage() {
                 </div>
             </section>
             
-            {/* ===== SEKCJA: FINALNE CTA ===== */}
             <section className="py-20 sm:py-32 px-4 relative overflow-hidden">
-                <div className="absolute inset-0 z-0 opacity-30">
+                <div className="absolute inset-0 z-0 opacity-30 hidden md:block">
                     <motion.div initial={{ scale: 1.5 }} whileInView={{ scale: 1 }} transition={{ duration: 1.5, ease: "easeOut" }} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[50rem] h-[50rem] bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500 rounded-full blur-3xl" />
                 </div>
                 <motion.div initial={{opacity: 0}} whileInView={{opacity: 1}} viewport={{once: true, amount: 0.3}} transition={{duration: 0.8}} className="max-w-3xl mx-auto text-center relative z-10">
