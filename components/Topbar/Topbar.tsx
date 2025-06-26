@@ -84,7 +84,7 @@ export default function Topbar() {
 
     return (
         <>
-            {pathname.startsWith("/rozmowa") ? (
+            {pathname?.startsWith("/rozmowa") ? (
                 <></>
             ) : (
                 <motion.nav
