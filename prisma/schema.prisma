@@ -147,7 +147,7 @@ model Appointment {
   subject   Subject
   price     Int               // Cena w groszach
   notes     String?           // Notatki od ucznia
-
+  paymentStatus String?
   teacherId String
   teacher   User   @relation("Teacher", fields: [teacherId], references: [id])
 
