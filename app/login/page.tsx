@@ -20,10 +20,13 @@ const LoginForm = () => {
     const [error, setError] = useState('');
 
     useEffect(() => {
-        const callbackError = searchParams.get('error');
-        if (callbackError) {
-            setError('Logowanie nie powiodło się. Spróbuj ponownie.');
+        if (searchParams) {
+            const callbackError = searchParams.get('error');
+            if (callbackError) {
+                setError('Logowanie nie powiodło się. Spróbuj ponownie.');
+            }
         }
+
     }, [searchParams]);
 
     const handleLogin = async (e: FormEvent) => {
@@ -50,7 +53,7 @@ const LoginForm = () => {
             setIsLoading(false);
         }
     };
-    
+
     const handleGoogleLogin = () => {
         setIsLoading(true);
         signIn('google', { callbackUrl: '/' });
@@ -58,10 +61,10 @@ const LoginForm = () => {
 
     const containerVariants = {
         hidden: { opacity: 0, scale: 0.95 },
-        visible: { 
-            opacity: 1, 
+        visible: {
+            opacity: 1,
             scale: 1,
-            transition: { staggerChildren: isMobile ? 0 : 0.1, duration: 0.4 } 
+            transition: { staggerChildren: isMobile ? 0 : 0.1, duration: 0.4 }
         },
     };
 
@@ -71,10 +74,10 @@ const LoginForm = () => {
     };
 
     return (
-        <motion.div 
-            variants={containerVariants} 
-            initial="hidden" 
-            animate="visible" 
+        <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
             className="w-full max-w-md p-8 sm:p-12 rounded-3xl bg-slate-800/50 border border-purple-500/30 backdrop-blur-lg shadow-2xl relative top-20 md:top-0 z-10"
         >
             <motion.div variants={itemVariants} className="text-center mb-8">
@@ -103,11 +106,11 @@ const LoginForm = () => {
                     <Link href="/zapomnialem-hasla" className="font-sans text-sm text-purple-300 hover:underline">Nie pamiętasz hasła?</Link>
                 </motion.div>
                 {error && (
-                    <motion.p initial={{opacity:0}} animate={{opacity:1}} className="font-sans text-red-400 text-center">{error}</motion.p>
+                    <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="font-sans text-red-400 text-center">{error}</motion.p>
                 )}
                 <motion.button variants={itemVariants} type="submit" disabled={isLoading} whileHover={{ scale: 1.02, boxShadow: "0px 8px 25px -8px rgba(251, 191, 36, 0.6)" }} whileTap={{ scale: 0.98 }} className="flex items-center cursor-pointer justify-center gap-2 w-full p-4 rounded-xl bg-gradient-to-r from-yellow-400 via-orange-500 to-orange-600 text-white text-xl shadow-lg hover:shadow-orange-500/40 transition-shadow disabled:opacity-60">
                     {isLoading ? (
-                        <motion.div animate={{rotate: 360}} transition={{duration: 1, repeat: Infinity, ease: 'linear'}}><FiLoader /></motion.div>
+                        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}><FiLoader /></motion.div>
                     ) : (
                         <span>Zaloguj się</span>
                     )}
@@ -131,7 +134,7 @@ export default function LoginPage() {
             <div className="absolute inset-0 z-0 opacity-40 hidden md:block">
                 <motion.div animate={{ rotate: 360 }} transition={{ duration: 50, repeat: Infinity, ease: "linear" }} className="absolute top-[-50%] left-[-50%] w-[150vw] h-[150vw] bg-gradient-to-br from-purple-800/80 via-indigo-700/60 to-pink-700/40 rounded-full blur-3xl" />
             </div>
-            <Suspense fallback={<div className="w-12 h-12"><FiLoader className="w-full h-full animate-spin"/></div>}>
+            <Suspense fallback={<div className="w-12 h-12"><FiLoader className="w-full h-full animate-spin" /></div>}>
                 <LoginForm />
             </Suspense>
         </main>
