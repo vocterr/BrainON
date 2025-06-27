@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from "framer-motion";
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useSocket } from '@/contexts/SocketContext';
+import { usePusher } from '@/lib/usePusher';
 import { FiHome, FiLoader, FiMonitor, FiPhone, FiSlash, FiUser, FiWifiOff, FiAlertTriangle, FiPhoneOff } from 'react-icons/fi';
 
 // --- TYPE DEFINITIONS ---
@@ -34,29 +34,38 @@ const TabButton = ({ text, isActive, onClick, count }: { text: string, isActive:
     </button>
 );
 
-const CallButton = ({ status, onClick }: { status: 'calling' | 'ringing' | 'offline' | 'rejected' | 'disconnected' | null, onClick: () => void }) => { 
+const CallButton = ({ status, isOnline, onClick }: { status: 'calling' | 'ringing' | 'offline' | 'rejected' | 'accepted' | 'disconnected' | null, isOnline: boolean, onClick: () => void }) => { 
     const baseClasses = "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-all duration-300 w-32 justify-center"; 
+    
+    // Show offline state if user is not online, regardless of other status
+    if (!isOnline) {
+        return (
+            <div className={`${baseClasses} bg-red-500/20 text-red-400`}> 
+                <FiWifiOff /> 
+                <span>Offline</span> 
+            </div>
+        );
+    }
+    
     switch (status) { 
         case 'calling': return (<div className={`${baseClasses} bg-yellow-500/20 text-yellow-300`}> <FiLoader className="animate-spin" /> <span>Łączenie...</span> </div>); 
         case 'ringing': return (<div className={`${baseClasses} bg-cyan-500/20 text-cyan-300`}> <FiPhone className="animate-pulse" /> <span>Dzwonię...</span> </div>); 
-        case 'offline': return (<div className={`${baseClasses} bg-red-500/20 text-red-400`}> <FiWifiOff /> <span>Offline</span> </div>); 
+        case 'accepted': return (<div className={`${baseClasses} bg-green-500/20 text-green-300`}> <FiPhone className="animate-pulse" /> <span>Zaakceptowano</span> </div>);
         case 'rejected': return (<div className={`${baseClasses} bg-red-500/20 text-red-400`}> <FiPhoneOff /> <span>Odrzucono</span> </div>); 
         case 'disconnected': return (<div className={`${baseClasses} bg-orange-500/20 text-orange-400`}> <FiWifiOff /> <span>Rozłączono</span> </div>); 
         default: return (<motion.button onClick={onClick} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className={`${baseClasses} bg-green-500/20 text-green-300 hover:bg-green-500/30`} > <FiPhone /> <span>Zadzwoń</span> </motion.button>); 
     } 
 };
 
-
 // --- MAIN COMPONENT ---
 export default function AdminPage() {
     const { data: session, status: sessionStatus } = useSession();
     const router = useRouter();
-    const { socket } = useSocket();
+    const { callStatus, isUserOnline, initiateCall, setCallStatus } = usePusher();
 
-    // FIXED: Added missing state for activeTab
     const [activeTab, setActiveTab] = useState<'upcoming' | 'completed'>('upcoming');
     const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
-    const [callStatuses, setCallStatuses] = useState<Record<string, 'calling' | 'ringing' | 'offline' | 'rejected' | null>>({});
+    const [callStatuses, setCallStatuses] = useState<Record<string, 'calling' | 'ringing' | 'offline' | 'rejected' | 'accepted' | 'disconnected' | null>>({});
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -79,47 +88,59 @@ export default function AdminPage() {
         fetchAppointments();
     }, [sessionStatus]);
 
-    // Listen for call status updates from the server
+    // Update call status when Pusher sends updates
     useEffect(() => {
-        const handleCallStatus = ({ studentId, status }: { studentId: string; status: 'ringing' | 'offline' | 'rejected' }) => {
-            setCallStatuses(prev => ({ ...prev, [studentId]: status }));
-            if (status === 'offline' || status === 'rejected') {
-                setTimeout(() => setCallStatuses(prev => ({ ...prev, [studentId]: null })), 4000);
+        if (callStatus) {
+            setCallStatuses(prev => ({ ...prev, [callStatus.studentId]: callStatus.status }));
+            
+            // Clear status after 4 seconds for rejected/offline
+            if (callStatus.status === 'offline' || callStatus.status === 'rejected') {
+                setTimeout(() => {
+                    setCallStatuses(prev => ({ ...prev, [callStatus.studentId]: null }));
+                    setCallStatus(null);
+                }, 4000);
             }
-        };
+            
+            // Clear accepted status immediately (since we're navigating away)
+            if (callStatus.status === 'accepted') {
+                setCallStatus(null);
+            }
+        }
+    }, [callStatus, setCallStatus]);
 
-        const handleCallAccepted = ({ studentId }: { studentId: string }) => {
-            setCallStatuses(prev => ({ ...prev, [studentId]: null }));
-        };
-
-        socket.on('call-status', handleCallStatus);
-        socket.on('call-accepted', handleCallAccepted);
-
-        return () => {
-            socket.off('call-status', handleCallStatus);
-            socket.off('call-accepted', handleCallAccepted);
-        };
-    }, [socket]);
-
-    // Simplified call initiation logic
+    // Handle initiating a call
     const handleInitiateCall = async (student: Student) => {
-        if (!socket.connected) {
-            alert("Błąd połączenia z serwerem. Odśwież stronę.");
+        // Check if student is online first
+        if (!isUserOnline(student.id)) {
+            setCallStatuses(prev => ({ ...prev, [student.id]: 'offline' }));
+            setTimeout(() => {
+                setCallStatuses(prev => ({ ...prev, [student.id]: null }));
+            }, 4000);
             return;
         }
+
         setCallStatuses(prev => ({ ...prev, [student.id]: 'calling' }));
+        
         try {
+            // Create call room first
             const res = await fetch('/api/calls', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ studentId: student.id }),
             });
+            
             if (!res.ok) {
                 const errorData = await res.json();
                 throw new Error(errorData.error || 'Nie udało się stworzyć pokoju.');
             }
+            
             const newRoom = await res.json();
-            console.log(`[AdminPage] Created room ${newRoom.id}. Navigating to call.`);
+            console.log(`[AdminPage] Created room ${newRoom.id}. Initiating call.`);
+            
+            // Use Pusher to notify the student
+            await initiateCall(newRoom.id, session?.user?.name || 'Admin');
+            
+            // Navigate to the call room
             router.push(`/rozmowa/${newRoom.id}`);
         } catch (error: any) {
             console.error("[AdminPage] Call initiation error:", error);
@@ -138,7 +159,6 @@ export default function AdminPage() {
         };
     }, [appointments]);
 
-    // FIXED: Added this constant to determine which list to show
     const displayedAppointments = activeTab === 'upcoming' ? upcomingAppointments : completedAppointments;
 
     if (sessionStatus === "loading") {
@@ -198,6 +218,7 @@ export default function AdminPage() {
                                                 {activeTab === 'upcoming' && app.type === 'ONLINE' && (
                                                     <CallButton
                                                         status={callStatuses[app.student.id]}
+                                                        isOnline={isUserOnline(app.student.id)}
                                                         onClick={() => handleInitiateCall(app.student)}
                                                     />
                                                 )}

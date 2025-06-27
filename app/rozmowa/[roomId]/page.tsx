@@ -6,9 +6,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSession } from 'next-auth/react';
-import { useSocket } from '@/contexts/SocketContext';
+import Pusher from 'pusher-js';
 import { FiCameraOff, FiMic, FiMicOff, FiVideo, FiVideoOff, FiAlertTriangle, FiPhoneOff, FiXCircle, FiLoader, FiMonitor, FiAirplay } from 'react-icons/fi';
-// Make sure this path is correct for your project structure
 import { ICE_SERVERS, getMediaStreamWithFallback, handleMediaStreamError } from '@/lib/webrtc-utils';
 
 // --- Sub-component: Placeholder for the video area ---
@@ -31,13 +30,11 @@ const ControlButton = ({ icon, offIcon, isToggled, onToggle, activeClass = 'bg-c
     </button>
 );
 
-
 // --- Main Page Component ---
 export default function RoomPage() {
     const { data: session, status: sessionStatus } = useSession();
     const router = useRouter();
     const { roomId } = useParams() as { roomId: string };
-    const { socket } = useSocket();
 
     const localVideoRef = useRef<HTMLVideoElement>(null);
     const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -49,6 +46,8 @@ export default function RoomPage() {
     const videoSenderRef = useRef<RTCRtpSender | null>(null);
     const hasInitiatedCallRef = useRef(false);
     const pendingCandidatesRef = useRef<RTCIceCandidate[]>([]);
+    const pusherRef = useRef<Pusher | null>(null);
+    const roomChannelRef = useRef<any>(null);
 
     const [isMuted, setIsMuted] = useState(false);
     const [isCameraOff, setIsCameraOff] = useState(false);
@@ -69,18 +68,29 @@ export default function RoomPage() {
         }
     }, []);
 
-    const handleHangUp = useCallback(() => {
+    const handleHangUp = useCallback(async () => {
         if (isCallEnded) return;
         setIsCallEnded(true);
-        socket.emit('hang-up', { roomId });
+        
+        // Notify other peer
+        if (roomChannelRef.current) {
+            await fetch('/api/room/notify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ roomId, event: 'hang-up' })
+            });
+        }
+        
+        // Clean up streams and connection
         localStreamRef.current?.getTracks().forEach(track => track.stop());
         localScreenStreamRef.current?.getTracks().forEach(track => track.stop());
         peerConnectionRef.current?.close();
+        
         setTimeout(() => {
             const redirectUrl = session?.user?.role === 'ADMIN' ? '/admin' : '/moje-terminy';
             router.push(redirectUrl);
         }, 2000);
-    }, [roomId, socket, session, router, isCallEnded]);
+    }, [roomId, session, router, isCallEnded]);
 
     const toggleMute = useCallback(() => {
         if (localStreamRef.current) {
@@ -137,13 +147,37 @@ export default function RoomPage() {
             setPrimaryView(prev => prev === 'camera' ? 'screen' : 'camera');
         }
     };
+
+    // Send WebRTC signaling data via Pusher
+    const sendSignal = useCallback(async (type: string, data: any) => {
+        try {
+            await fetch('/api/room/signal', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ roomId, type, data })
+            });
+        } catch (error) {
+            console.error(`Error sending ${type}:`, error);
+        }
+    }, [roomId]);
     
     useEffect(() => {
-        if (sessionStatus !== 'authenticated' || !socket.connected || !roomId) return;
+        if (sessionStatus !== 'authenticated' || !roomId) return;
         
         const pc = new RTCPeerConnection(ICE_SERVERS);
         peerConnectionRef.current = pc;
         const isInitiator = session.user.role === 'ADMIN';
+
+        // Initialize Pusher
+        const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
+            cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
+            authEndpoint: '/api/pusher/auth'
+        });
+        pusherRef.current = pusher;
+
+        // Subscribe to room channel
+        const roomChannel = pusher.subscribe(`private-room-${roomId}`);
+        roomChannelRef.current = roomChannel;
 
         const onConnectionStateChange = () => {
             if (!pc) return;
@@ -153,7 +187,7 @@ export default function RoomPage() {
         };
 
         const onIceCandidate = (event: RTCPeerConnectionIceEvent) => {
-            if (event.candidate) socket.emit('webrtc-ice-candidate', { roomId, candidate: event.candidate });
+            if (event.candidate) sendSignal('ice-candidate', event.candidate);
         };
 
         const onTrack = (event: RTCTrackEvent) => {
@@ -173,41 +207,41 @@ export default function RoomPage() {
                 try {
                     const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
                     await pc.setLocalDescription(offer);
-                    socket.emit('webrtc-offer', { roomId, offer });
+                    sendSignal('offer', offer);
                 } catch (e) { console.error("Error creating offer:", e); }
             }
         };
 
-        const handleOffer = async ({ offer }: { offer: RTCSessionDescriptionInit }) => {
+        const handleOffer = async (data: { offer: RTCSessionDescriptionInit }) => {
             if (!isInitiator) {
                 try {
-                    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+                    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
                     pendingCandidatesRef.current.forEach(c => pc.addIceCandidate(c));
                     pendingCandidatesRef.current = [];
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
-                    socket.emit('webrtc-answer', { roomId, answer });
+                    sendSignal('answer', answer);
                 } catch (e) { console.error("Error handling offer:", e); }
             }
         };
 
-        const handleAnswer = async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
+        const handleAnswer = async (data: { answer: RTCSessionDescriptionInit }) => {
             if (isInitiator) {
                 try {
-                    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                    await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
                     pendingCandidatesRef.current.forEach(c => pc.addIceCandidate(c));
                     pendingCandidatesRef.current = [];
                 } catch(e) { console.error("Error setting remote description:", e); }
             }
         };
         
-        const handleRemoteIceCandidate = async ({ candidate }: { candidate: RTCIceCandidate | null }) => {
-            if (!candidate) return;
+        const handleRemoteIceCandidate = async (data: { candidate: RTCIceCandidate | null }) => {
+            if (!data.candidate) return;
             try {
                 if (pc.remoteDescription) {
-                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
                 } else {
-                    pendingCandidatesRef.current.push(new RTCIceCandidate(candidate));
+                    pendingCandidatesRef.current.push(new RTCIceCandidate(data.candidate));
                 }
             } catch (error) { console.error("Error adding ICE candidate", error); }
         };
@@ -216,15 +250,23 @@ export default function RoomPage() {
             pc.onconnectionstatechange = onConnectionStateChange;
             pc.onicecandidate = onIceCandidate;
             pc.ontrack = onTrack;
-            socket.on('peer-joined', handlePeerJoined);
-            socket.on('webrtc-offer', handleOffer);
-            socket.on('webrtc-answer', handleAnswer);
-            socket.on('webrtc-ice-candidate', handleRemoteIceCandidate);
-            socket.on('call-ended', handleHangUp);
-            socket.emit('join-room', roomId);
+            
+            // Bind Pusher events
+            roomChannel.bind('peer-joined', handlePeerJoined);
+            roomChannel.bind('webrtc-offer', handleOffer);
+            roomChannel.bind('webrtc-answer', handleAnswer);
+            roomChannel.bind('webrtc-ice-candidate', handleRemoteIceCandidate);
+            roomChannel.bind('call-ended', handleHangUp);
+
+            // Notify that we joined
+            await fetch('/api/room/join', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ roomId })
+            });
 
             if (isInitiator && !hasInitiatedCallRef.current) {
-                socket.emit('initiate-call', { roomId, callerName: session.user.name || 'Admin' });
+                // The admin already initiated the call in the admin page
                 hasInitiatedCallRef.current = true;
             }
             
@@ -247,11 +289,9 @@ export default function RoomPage() {
         initializeCall();
 
         return () => {
-            socket.off('peer-joined', handlePeerJoined);
-            socket.off('webrtc-offer', handleOffer);
-            socket.off('webrtc-answer', handleAnswer);
-            socket.off('webrtc-ice-candidate', handleRemoteIceCandidate);
-            socket.off('call-ended', handleHangUp);
+            roomChannel.unbind_all();
+            roomChannel.unsubscribe();
+            pusher.disconnect();
             if (pc) {
                 pc.onicecandidate = null;
                 pc.ontrack = null;
@@ -262,7 +302,7 @@ export default function RoomPage() {
                 localStreamRef.current.getTracks().forEach(track => track.stop());
             }
         };
-    }, [roomId, sessionStatus, socket, session, handleHangUp]);
+    }, [roomId, sessionStatus, session, handleHangUp, sendSignal]);
     
     const mainStream = primaryView === 'screen' ? remoteScreenStream : remoteCameraStream;
     const pipStream = primaryView === 'screen' ? remoteCameraStream : remoteScreenStream;

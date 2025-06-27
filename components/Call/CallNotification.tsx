@@ -3,27 +3,17 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useSocket } from '@/contexts/SocketContext';
+import { usePusher } from '@/lib/usePusher';
 import { useSession } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { FiPhone, FiPhoneOff, FiPhoneIncoming } from 'react-icons/fi';
 
-interface IncomingCallData {
-    roomId: string;
-    callerName: string;
-    adminId: string;
-}
-
 export default function CallNotification() {
     const { data: session, status: sessionStatus } = useSession();
     const router = useRouter();
-    const { socket } = useSocket();
-    const [incomingCall, setIncomingCall] = useState<IncomingCallData | null>(null);
+    const { incomingCall, respondToCall } = usePusher();
     const ringtoneRef = useRef<HTMLAudioElement | null>(null);
-
-    // This ref will hold the ID of the auto-reject timeout
-    const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Initialize the ringtone audio object once on component mount
     useEffect(() => {
@@ -41,82 +31,10 @@ export default function CallNotification() {
         }
     }, [incomingCall]);
 
-    // Wrapped in useCallback so it can be used in the useEffect dependency array
-    const rejectCall = useCallback((callToReject?: IncomingCallData) => {
-        const callData = callToReject || incomingCall;
-        if (!callData) return;
-        
-        // Clear any existing auto-reject timeout
-        if (callTimeoutRef.current) {
-            clearTimeout(callTimeoutRef.current);
-        }
-        
-        console.log("[CallNotification] Rejecting call");
-        socket.emit('call-rejected', { adminId: callData.adminId, studentId: session?.user?.id });
-
-        setIncomingCall(null);
-    }, [incomingCall, socket, session?.user?.id]);
-
-
-    // The main effect to listen for incoming call notifications from the server
-    useEffect(() => {
-        // Guard clause: Only authenticated students should listen for calls.
-        if (sessionStatus !== 'authenticated' || !session?.user?.id || session.user.role === 'ADMIN') {
-            return;
-        }
-
-        // DEBUG: Confirm that this component is actively listening for the event.
-        console.log(`[CallNotification] DEBUG: Component is mounted and listening for 'incoming-call' for user: [${session.user.id}]`);
-
-        // This function will handle the 'incoming-call' event from the server
-        const handleIncomingCall = (data: IncomingCallData) => {
-            console.log("[CallNotification] DEBUG: SUCCESS! Received 'incoming-call' event with data:", data);
-            
-            // Set the state to show the notification UI
-            setIncomingCall(data);
-
-            // Set a 30-second timeout to automatically reject the call if the user doesn't respond.
-            if (callTimeoutRef.current) clearTimeout(callTimeoutRef.current);
-            callTimeoutRef.current = setTimeout(() => {
-                console.log("[CallNotification] Call timed out. Auto-rejecting.");
-                rejectCall(data);
-            }, 30000);
-        };
-
-        // Attach the event listener
-        socket.on('incoming-call', handleIncomingCall);
-
-        // Cleanup function: Remove the listener when the component unmounts
-        return () => {
-            socket.off('incoming-call', handleIncomingCall);
-            // Also clear any active timeout on cleanup
-            if (callTimeoutRef.current) {
-                clearTimeout(callTimeoutRef.current);
-            }
-        };
-    }, [socket, sessionStatus, session?.user?.id, session?.user?.role, rejectCall]);
-
-    const acceptCall = useCallback(() => {
-        if (!incomingCall) return;
-
-        // Clear the auto-reject timeout since the user accepted
-        if (callTimeoutRef.current) {
-            clearTimeout(callTimeoutRef.current);
-        }
-
-        const { roomId, adminId } = incomingCall;
-        
-        console.log("[CallNotification] Accepting call to room:", roomId);
-        
-        // Notify the server (and the admin) that the call was accepted
-        socket.emit('call-accepted', { adminId, roomId, studentId: session?.user?.id });
-        
-        // Hide the notification UI
-        setIncomingCall(null);
-        
-        // Navigate to the call room
-        router.push(`/rozmowa/${roomId}`);
-    }, [incomingCall, socket, router, session?.user?.id]);
+    // Guard clause: Only authenticated students should see notifications
+    if (sessionStatus !== 'authenticated' || !session?.user?.id || session.user.role === 'ADMIN') {
+        return null;
+    }
 
     return (
         <AnimatePresence>
@@ -145,7 +63,7 @@ export default function CallNotification() {
                              <motion.button
                                  whileHover={{ scale: 1.05 }}
                                  whileTap={{ scale: 0.95 }}
-                                 onClick={acceptCall}
+                                 onClick={() => respondToCall('accept', incomingCall.roomId, incomingCall.adminId)}
                                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl"
                              >
                                  <FiPhone className="w-5 h-5" />
@@ -154,7 +72,7 @@ export default function CallNotification() {
                              <motion.button
                                  whileHover={{ scale: 1.05 }}
                                  whileTap={{ scale: 0.95 }}
-                                 onClick={() => rejectCall()}
+                                 onClick={() => respondToCall('reject', incomingCall.roomId, incomingCall.adminId)}
                                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl"
                              >
                                  <FiPhoneOff className="w-5 h-5" />
