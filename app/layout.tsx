@@ -5,7 +5,6 @@ import "./globals.css";
 import Topbar from "@/components/Topbar/Topbar";
 import Providers from "./providers"; // KROK 1: Importujemy nasz komponent-opakowanie
 import CallNotification from "@/components/Call/CallNotification";
-import { SocketProvider } from "@/contexts/SocketContext";
 import { useEffect } from "react";
 
 const chewy = Chewy({subsets: ["latin"], weight: ["400"]});
@@ -41,12 +40,10 @@ export default function RootLayout({
         {/* KROK 2: Owijamy całą aplikację w nasz komponent <Providers>,
             który w środku ma "use client" i <SessionProvider> */}
         <Providers>
-          <SocketProvider>
           <Topbar />
           {/* Tag <main> jest ważny dla semantyki i SEO */}
           <main>{children}</main> 
           <CallNotification />
-          </SocketProvider>
         </Providers>
       </body>
     </html>
