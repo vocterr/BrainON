@@ -1,12 +1,10 @@
-// FILE: app/zacznij-teraz/page.tsx
-
 "use client";
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { JSX, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { FiArrowRight, FiCalendar, FiChevronLeft, FiChevronRight, FiLoader } from 'react-icons/fi';
-import { useIsMobile } from '@/lib/useIsMobile'; // KROK 1: Import
+import { useIsMobile } from '@/lib/useIsMobile';
 
 type BookedSlots = {
     [date: string]: string[];
@@ -16,7 +14,7 @@ const timeSlots: string[] = ["15:00", "16:30", "18:00", "19:30", "21:00"]
 
 export default function ZacznijTerazPage() {
     const router = useRouter();
-    const isMobile = useIsMobile(); // KROK 2: Użycie hooka
+    const isMobile = useIsMobile();
     
     const [currentDate, setCurrentDate] = useState<Date>(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -56,10 +54,23 @@ export default function ZacznijTerazPage() {
     
     const handleBooking = async () => {
         if (!selectedDate || !selectedTime) return;
+
         setIsBooking(true);
-        const dateString = selectedDate.toISOString().split('T')[0];
+        
+        // ==================================================================
+        // POPRAWKA BŁĘDU STREFY CZASOWEJ
+        // Ręcznie budujemy datę w formacie YYYY-MM-DD, ignorując UTC.
+        // ==================================================================
+        const year = selectedDate.getFullYear();
+        const month = (selectedDate.getMonth() + 1).toString().padStart(2, '0'); // +1 bo miesiące są 0-indeksowane
+        const day = selectedDate.getDate().toString().padStart(2, '0');
+        const dateString = `${year}-${month}-${day}`;
+        // ==================================================================
+        
         const timeString = selectedTime.replace(':', '-');
+
         await new Promise(resolve => setTimeout(resolve, 800));
+
         router.push(`/wybierz-termin/${dateString}_${timeString}`);
     };
 
@@ -77,7 +88,7 @@ export default function ZacznijTerazPage() {
 
         for (let i = 1; i <= daysInMonth; i++) {
             const dayDate = new Date(year, month, i);
-            const dateString = dayDate.toISOString().split('T')[0];
+            const dateString = `${year}-${(month + 1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
             const booked = bookedSlots[dateString] || [];
             const isFullyBooked = booked.length >= timeSlots.length;
             const isPastDay = isPast(dayDate);
@@ -154,7 +165,8 @@ export default function ZacznijTerazPage() {
                                         <p className="font-sans text-purple-200/80 mb-3">Wybierz godzinę:</p>
                                         <div className="grid grid-cols-2 gap-3">
                                             {timeSlots.map(time => {
-                                                const isBooked = (bookedSlots[selectedDate.toISOString().split('T')[0]] || []).includes(time);
+                                                const dateString = `${selectedDate.getFullYear()}-${(selectedDate.getMonth() + 1).toString().padStart(2, '0')}-${selectedDate.getDate().toString().padStart(2, '0')}`;
+                                                const isBooked = (bookedSlots[dateString] || []).includes(time);
                                                 return (
                                                     <button key={time} onClick={() => setSelectedTime(time)} disabled={isBooked} className={`p-3 cursor-pointer rounded-lg font-sans transition-all duration-200 ${isBooked ? "bg-slate-700 text-slate-500 cursor-not-allowed" : selectedTime === time ? "bg-gradient-to-r from-yellow-400 to-orange-500 text-slate-900 font-bold" : "bg-slate-700/50 hover:bg-purple-500/20"}`}>
                                                         {time}
