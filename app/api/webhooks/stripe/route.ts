@@ -1,66 +1,82 @@
-// FILE: app/api/webhooks/stripe/route.ts
-
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import prisma from '@/prisma/prisma'; // Upewnij się, że ścieżka jest poprawna
+import prisma from '@/prisma/prisma';
 
-// Inicjalizujemy Stripe z naszym tajnym kluczem
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-05-28.basil',
+  apiVersion: '2025-05-28.basil'
 });
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 export async function POST(request: Request) {
-  // Pobieramy surowe ciało żądania jako bufor
   const body = await request.arrayBuffer();
-  
-  // ==================================================================
-  // OSTATECZNA POPRAWKA: Odczytujemy nagłówek bezpośrednio z obiektu 'request'.
-  // To jest poprawny i prostszy sposób, który rozwiązuje błąd TypeScript.
-  // ==================================================================
   const signature = request.headers.get('stripe-signature') as string;
 
   let event: Stripe.Event;
 
   try {
-    // Weryfikujemy, czy powiadomienie na pewno przyszło od Stripe
     event = stripe.webhooks.constructEvent(Buffer.from(body), signature, webhookSecret);
   } catch (err: any) {
     console.error(`❌ Webhook signature verification failed: ${err.message}`);
     return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
   }
 
-  // Jeśli weryfikacja się powiodła, obsługujemy zdarzenie
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
     const metadata = session.metadata;
 
-    // Upewniamy się, że metadane i potrzebne ID istnieją
-    if (!metadata || !metadata.appointmentId) {
-        console.error('❌ Webhook Error: Missing appointmentId in metadata for session:', session.id);
-        return new NextResponse('Brak appointmentId w metadanych sesji.', { status: 400 });
+    if (!metadata) {
+        console.error('❌ Webhook Error: Missing metadata in session:', session.id);
+        return new NextResponse('Brak metadanych w sesji.', { status: 400 });
     }
+
+    // ==================================================================
+    // POPRAWIONA LOGIKA: Odczytujemy dane i tworzymy nową rezerwację
+    // ==================================================================
+    const { studentId, appointmentDateTime, subject, type, price, notes } = metadata;
+    const adminId = process.env.ADMINID as string;
     
-    const { appointmentId } = metadata;
+    // Walidacja danych z metadanych
+    if (!studentId || !appointmentDateTime || !subject || !type || !price || !adminId) {
+        console.error('❌ Webhook Error: Incomplete metadata:', metadata);
+        return new NextResponse('Niekompletne dane w metadanych sesji.', { status: 400 });
+    }
 
     try {
-      // Znajdź wizytę w bazie danych i zaktualizuj jej status
-      await prisma.appointment.update({
-        where: {
-          id: appointmentId,
-        },
-        data: {
-          paymentStatus: 'PAID', // Zakładając, że masz takie pole w modelu
-        },
+      const appointmentDate = new Date(appointmentDateTime);
+
+      // Dodajemy sprawdzenie dostępności terminu również tutaj, aby uniknąć race condition
+      const existingAppointment = await prisma.appointment.findFirst({
+        where: { date: appointmentDate },
       });
-      console.log(`✅ Pomyślnie oznaczono rezerwację ${appointmentId} jako opłaconą.`);
+
+      if (existingAppointment) {
+        console.warn(`Webhook: Próba rezerwacji już zajętego terminu: ${appointmentDateTime}`);
+        // Zwracamy 200, aby Stripe nie próbował ponownie. Obsługa zwrotu pieniędzy
+        // powinna być wykonana manualnie lub przez inny system.
+        return new NextResponse(null, { status: 200 });
+      }
+
+      await prisma.appointment.create({
+        data: {
+          studentId: studentId,
+          teacherId: adminId, 
+          date: appointmentDate,
+          subject: subject as any, // Typy enum są walidowane wcześniej
+          type: type as any,
+          price: parseInt(price),
+          notes: notes,
+          status: 'UPCOMING',
+          paymentStatus: 'PAID' // Kluczowa zmiana!
+        }
+      });
+      
+      console.log(`✅ Pomyślnie zapisano opłaconą rezerwację z metadanych Stripe.`);
     } catch (dbError) {
-      console.error("❌ Błąd zapisu do bazy danych:", dbError);
+      console.error("❌ Błąd zapisu do bazy danych z webhooka:", dbError);
       return new NextResponse('Błąd serwera podczas zapisu rezerwacji.', { status: 500 });
     }
   }
 
-  // Zwracamy sukces (200 OK) do Stripe, aby potwierdzić odbiór
   return new NextResponse(null, { status: 200 });
 }
