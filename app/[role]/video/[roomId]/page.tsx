@@ -52,7 +52,7 @@ export default function RoomPage() {
     const router = useRouter();
     const params = useParams();
     const roomId = (params.roomId || params.id) as string;
-
+    
     const isMobile = useIsMobile();
     
     const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -64,6 +64,7 @@ export default function RoomPage() {
     const localScreenStreamRef = useRef<MediaStream | null>(null);
     const videoSenderRef = useRef<RTCRtpSender | null>(null);
     const pusherRef = useRef<Pusher | null>(null);
+    const channelRef = useRef<PresenceChannel | null>(null);
     const pendingCandidatesRef = useRef<RTCIceCandidate[]>([]);
 
     const [isMuted, setIsMuted] = useState(false);
@@ -76,7 +77,7 @@ export default function RoomPage() {
     const [isScreenShareSupported, setIsScreenShareSupported] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState('Inicjowanie...');
     const [hasMediaError, setHasMediaError] = useState(false);
-
+    
     useEffect(() => {
         if (typeof navigator !== 'undefined' && navigator.mediaDevices && 'getDisplayMedia' in navigator.mediaDevices) {
             setIsScreenShareSupported(true);
@@ -98,15 +99,18 @@ export default function RoomPage() {
     const handleHangUp = useCallback(async () => {
         if (isCallEnded) return;
         setIsCallEnded(true);
+        setConnectionStatus("Rozłączanie...");
+        
         await fetch('/api/room/notify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ roomId, event: 'hang-up' })
         });
         
+        pusherRef.current?.disconnect();
+        peerConnectionRef.current?.close();
         localStreamRef.current?.getTracks().forEach(track => track.stop());
         localScreenStreamRef.current?.getTracks().forEach(track => track.stop());
-        peerConnectionRef.current?.close();
         
         setTimeout(() => {
             const redirectUrl = session?.user?.role === 'ADMIN' ? '/admin' : '/moje-terminy';
@@ -184,6 +188,7 @@ export default function RoomPage() {
         });
         pusherRef.current = pusher;
         const channel = pusher.subscribe(`presence-room-${roomId}`) as PresenceChannel;
+        channelRef.current = channel;
 
         const onConnectionStateChange = () => {
             if (!pc) return;
@@ -194,15 +199,13 @@ export default function RoomPage() {
         };
 
         const onIceCandidate = (event: RTCPeerConnectionIceEvent) => {
-            if (event.candidate) {
-                sendSignal('ice-candidate', event.candidate);
-            }
+            if (event.candidate) sendSignal('ice-candidate', event.candidate);
         };
 
         const onTrack = (event: RTCTrackEvent) => {
             const stream = event.streams[0];
             if (stream) {
-                const isScreen = !!(event.track.getSettings().displaySurface);
+                const isScreen = !!(event.track.getSettings && event.track.getSettings().displaySurface);
                 if (isScreen) {
                     setRemoteScreenStream(stream);
                     setPrimaryView('screen');
@@ -212,27 +215,46 @@ export default function RoomPage() {
             }
         };
 
+        const createOffer = async () => {
+            try {
+                setConnectionStatus("Tworzenie połączenia...");
+                const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+                await pc.setLocalDescription(offer);
+                sendSignal('offer', offer);
+            } catch (e) { console.error("Błąd tworzenia oferty:", e); }
+        };
+
         const handleOffer = async (data: any) => {
             if (!isInitiator) {
-                await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-                pendingCandidatesRef.current.forEach(c => pc.addIceCandidate(c));
-                pendingCandidatesRef.current = [];
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                sendSignal('answer', answer);
+                try {
+                    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+                    pendingCandidatesRef.current.forEach(c => pc.addIceCandidate(c));
+                    pendingCandidatesRef.current = [];
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    sendSignal('answer', answer);
+                } catch (e) { console.error("Błąd obsługi oferty:", e); }
             }
         };
+
         const handleAnswer = async (data: any) => {
             if (isInitiator) {
-                await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-                pendingCandidatesRef.current.forEach(c => pc.addIceCandidate(c));
-                pendingCandidatesRef.current = [];
+                try {
+                    await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                    pendingCandidatesRef.current.forEach(c => pc.addIceCandidate(c));
+                    pendingCandidatesRef.current = [];
+                } catch(e) { console.error("Błąd ustawiania odpowiedzi:", e); }
             }
         };
+        
         const handleRemoteIceCandidate = async (data: any) => {
             if (data.candidate && pc.signalingState !== 'closed') {
                 try {
-                    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                    if (pc.remoteDescription) {
+                        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                    } else {
+                        pendingCandidatesRef.current.push(new RTCIceCandidate(data.candidate));
+                    }
                 } catch (e) { console.error("Błąd dodawania kandydata ICE:", e); }
             }
         };
@@ -247,29 +269,31 @@ export default function RoomPage() {
             channel.bind('webrtc-ice-candidate', handleRemoteIceCandidate);
             channel.bind('hang-up', handleHangUp);
 
-            try {
-                const stream = await getMediaStreamWithFallback();
-                localStreamRef.current = stream;
-                if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-                stream.getTracks().forEach(track => {
-                    const sender = pc.addTrack(track, stream);
-                    if (track.kind === 'video') videoSenderRef.current = sender;
-                });
-            } catch (e: any) {
-                setHasMediaError(true);
-                setConnectionStatus(handleMediaStreamError(e));
-            }
+            channel.bind('pusher:subscription_succeeded', async () => {
+                setConnectionStatus("Oczekiwanie na drugiego uczestnika...");
+                try {
+                    const stream = await getMediaStreamWithFallback();
+                    localStreamRef.current = stream;
+                    if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+                    stream.getTracks().forEach(track => {
+                        const sender = pc.addTrack(track, stream);
+                        if (track.kind === 'video') videoSenderRef.current = sender;
+                    });
+                    setHasMediaError(false);
 
-            const createOffer = () => {
-                pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
-                  .then(offer => pc.setLocalDescription(offer))
-                  .then(() => sendSignal('offer', pc.localDescription));
-            };
-            
+                    await fetch('/api/room/join', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ roomId }),
+                    });
+
+                } catch (e: any) {
+                    setHasMediaError(true);
+                    setConnectionStatus(handleMediaStreamError(e));
+                }
+            });
+
             if (isInitiator) {
-                channel.bind('pusher:subscription_succeeded', () => {
-                    if (channel.members.count > 1) createOffer();
-                });
                 channel.bind('pusher:member_added', createOffer);
             }
         };
@@ -277,11 +301,17 @@ export default function RoomPage() {
         initializeCall();
 
         return () => {
-            if (pusherRef.current) pusherRef.current.disconnect();
-            if (peerConnectionRef.current) peerConnectionRef.current.close();
+            console.log("Czyszczenie... Rozłączanie z Pusher i zamykanie połączenia WebRTC.");
+            if (pusherRef.current) {
+                pusherRef.current.disconnect();
+            }
+            if (peerConnectionRef.current) {
+                peerConnectionRef.current.close();
+            }
             localStreamRef.current?.getTracks().forEach(t => t.stop());
+            localScreenStreamRef.current?.getTracks().forEach(t => t.stop());
         };
-    }, [roomId, sessionStatus, handleHangUp, sendSignal]);
+    }, [roomId, sessionStatus, session, handleHangUp, sendSignal]);
     
     const mainStream = primaryView === 'screen' ? remoteScreenStream : remoteCameraStream;
     const pipStream = primaryView === 'screen' ? remoteCameraStream : remoteScreenStream;
@@ -297,7 +327,7 @@ export default function RoomPage() {
                  {connectionStatus !== 'connected' && !isCallEnded && (
                      <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-800/80 backdrop-blur-sm rounded-lg px-4 py-2 flex items-center gap-3">
                         <FiLoader className="animate-spin text-cyan-400"/>
-                        <span className="text-slate-300">{connectionStatus}</span>
+                        <span className="text-slate-300 capitalize">{connectionStatus}</span>
                      </motion.div>
                  )}
              </AnimatePresence>
