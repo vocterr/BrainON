@@ -61,6 +61,7 @@ export default function RoomPage() {
 
     const [connectionStatus, setConnectionStatus] = useState('Inicjowanie...');
     const [hasMediaError, setHasMediaError] = useState(false);
+    const [isConnected, setIsConnected] = useState(false);
     
     useEffect(() => {
         if (typeof navigator !== 'undefined' && navigator.mediaDevices && 'getDisplayMedia' in navigator.mediaDevices) {
@@ -182,7 +183,22 @@ export default function RoomPage() {
         const onConnectionStateChange = () => {
             if (!pc) return;
             const state = pc.connectionState;
-            setConnectionStatus(state);
+            const iceState = pc.iceConnectionState;
+            
+            console.log('Connection state:', state, 'ICE state:', iceState);
+            
+            // Update connection status based on state
+            if (state === 'connected' || iceState === 'connected' || iceState === 'completed') {
+                setConnectionStatus('Połączono');
+                setIsConnected(true);
+            } else if (state === 'connecting' || iceState === 'checking') {
+                setConnectionStatus('Łączenie...');
+            } else if (state === 'failed' || iceState === 'failed') {
+                setConnectionStatus('Połączenie nieudane');
+            } else if (state === 'disconnected' || iceState === 'disconnected') {
+                setConnectionStatus('Rozłączono');
+            }
+            
             if (['disconnected', 'closed', 'failed'].includes(state)) handleHangUp();
         };
 
@@ -199,6 +215,9 @@ export default function RoomPage() {
                 setPrimaryView('screen');
             } else {
                 setRemoteCameraStream(stream);
+                // Mark as connected when we receive remote stream
+                setIsConnected(true);
+                setConnectionStatus('Połączono');
             }
         };
 
@@ -248,6 +267,7 @@ export default function RoomPage() {
 
         const initializeCall = async () => {
             pc.onconnectionstatechange = onConnectionStateChange;
+            pc.oniceconnectionstatechange = onConnectionStateChange; // Also listen to ICE state
             pc.onicecandidate = onIceCandidate;
             pc.ontrack = onTrack;
             
@@ -296,6 +316,7 @@ export default function RoomPage() {
                 pc.onicecandidate = null;
                 pc.ontrack = null;
                 pc.onconnectionstatechange = null;
+                pc.oniceconnectionstatechange = null;
                 pc.close();
             }
             if (localStreamRef.current) {
@@ -326,7 +347,7 @@ export default function RoomPage() {
     return (
         <div className="relative w-full h-screen bg-slate-900 text-white flex flex-col items-center justify-center overflow-hidden">
              <AnimatePresence>
-                 {connectionStatus !== 'connected' && !isCallEnded && (
+                 {!isConnected && !isCallEnded && (
                      <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-800/80 backdrop-blur-sm rounded-lg px-4 py-2 flex items-center gap-3">
                         <FiLoader className="animate-spin text-cyan-400"/>
                         <span className="text-slate-300">{connectionStatus}</span>
@@ -336,7 +357,7 @@ export default function RoomPage() {
  
              <div onClick={handleSwapViews} className={`w-full h-full flex items-center justify-center bg-black ${remoteScreenStream ? 'cursor-pointer' : ''}`}>
                  <video ref={remoteVideoRef} autoPlay playsInline className={`w-full h-full object-contain`} />
-                 {!mainStream && !isCallEnded && <VideoPlaceholder text={connectionStatus} isError={hasMediaError} />}
+                 {!mainStream && !isCallEnded && !isConnected && <VideoPlaceholder text={connectionStatus} isError={hasMediaError} />}
              </div>
  
              <AnimatePresence>

@@ -1,3 +1,4 @@
+// FILE: app/api/room/join/route.ts
 import { NextResponse } from 'next/server';
 import Pusher from 'pusher';
 import { getServerSession } from 'next-auth/next';
