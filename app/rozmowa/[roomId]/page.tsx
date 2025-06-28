@@ -51,8 +51,8 @@ const ControlButton = ({ icon, offIcon, isToggled, onToggle, activeClass = 'bg-c
 export default function RoomPage() {
     const { data: session, status: sessionStatus } = useSession();
     const router = useRouter();
-    const params = useParams(); // Pobieramy parametry tutaj
-    const roomId = params?.roomId as string; // Używamy 'roomId' zgodnie z nazwą folderu
+    const params = useParams();
+    const roomId = params.roomId as string;
     
     const isMobile = useIsMobile();
     
@@ -86,207 +86,107 @@ export default function RoomPage() {
 
     const sendSignal = useCallback(async (type: string, data: any) => {
         if (!roomId) return;
-        try {
-            await fetch('/api/room/signal', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ roomId, type, data }),
-            });
-        } catch (error) {
-            console.error(`Błąd podczas wysyłania sygnału ${type}:`, error);
-        }
+        await fetch('/api/room/signal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId, type, data }), });
     }, [roomId]);
 
     const handleHangUp = useCallback(async () => {
         if (isCallEnded) return;
         setIsCallEnded(true);
         setConnectionStatus("Rozłączanie...");
-        
-        await fetch('/api/room/notify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ roomId, event: 'hang-up' })
-        });
-        
+        await fetch('/api/room/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId, event: 'hang-up' }) });
         pusherRef.current?.disconnect();
         peerConnectionRef.current?.close();
         localStreamRef.current?.getTracks().forEach(track => track.stop());
         localScreenStreamRef.current?.getTracks().forEach(track => track.stop());
-        
         setTimeout(() => {
             const redirectUrl = session?.user?.role === 'ADMIN' ? '/admin' : '/moje-terminy';
             router.push(redirectUrl);
         }, 1500);
     }, [roomId, session, router, isCallEnded]);
 
-    const toggleMute = useCallback(() => {
-        if (localStreamRef.current) {
-            localStreamRef.current.getAudioTracks().forEach(track => {
-                track.enabled = !track.enabled;
-                setIsMuted(!track.enabled);
-            });
-        }
-    }, []);
-
-    const toggleCamera = useCallback(() => {
-        if (localStreamRef.current) {
-            localStreamRef.current.getVideoTracks().forEach(track => {
-                track.enabled = !track.enabled;
-                setIsCameraOff(!track.enabled);
-            });
-        }
-    }, []);
-
-    const stopScreenShare = useCallback(() => {
-        if (!videoSenderRef.current || !localStreamRef.current) return;
-        localScreenStreamRef.current?.getTracks().forEach(track => track.stop());
-        const cameraTrack = localStreamRef.current.getVideoTracks()[0];
-        if (cameraTrack) {
-            videoSenderRef.current.replaceTrack(cameraTrack);
-        }
-        setIsSharingScreen(false);
-    }, []);
-
-    const handleToggleScreenShare = useCallback(async () => {
-        if (isSharingScreen) {
-            stopScreenShare();
-        } else {
-            if (!peerConnectionRef.current || !videoSenderRef.current) return;
-            try {
-                const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-                const screenTrack = screenStream.getVideoTracks()[0];
-                if (!screenTrack) return;
-                
-                screenTrack.onended = () => stopScreenShare();
-                videoSenderRef.current.replaceTrack(screenTrack);
-                localScreenStreamRef.current = screenStream;
-                setIsSharingScreen(true);
-            } catch (error) {
-                console.error("Błąd udostępniania ekranu:", error);
-            }
-        }
-    }, [isSharingScreen, stopScreenShare]);
-
-    const handleSwapViews = () => {
-        if (remoteScreenStream) {
-            setPrimaryView(prev => prev === 'camera' ? 'screen' : 'camera');
-        }
-    };
+    const toggleMute = useCallback(() => { localStreamRef.current?.getAudioTracks().forEach(track => { track.enabled = !track.enabled; setIsMuted(!track.enabled); }); }, []);
+    const toggleCamera = useCallback(() => { localStreamRef.current?.getVideoTracks().forEach(track => { track.enabled = !track.enabled; setIsCameraOff(!track.enabled); }); }, []);
+    const stopScreenShare = useCallback(() => { if (!videoSenderRef.current || !localStreamRef.current) return; localScreenStreamRef.current?.getTracks().forEach(track => track.stop()); const cameraTrack = localStreamRef.current.getVideoTracks()[0]; if (cameraTrack) { videoSenderRef.current.replaceTrack(cameraTrack); } setIsSharingScreen(false); }, []);
+    const handleToggleScreenShare = useCallback(async () => { if (isSharingScreen) { stopScreenShare(); } else { try { const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true }); const screenTrack = screenStream.getVideoTracks()[0]; if (!videoSenderRef.current || !screenTrack) return; screenTrack.onended = () => stopScreenShare(); videoSenderRef.current.replaceTrack(screenTrack); localScreenStreamRef.current = screenStream; setIsSharingScreen(true); } catch (error) { console.error("Błąd udostępniania ekranu:", error); } } }, [isSharingScreen, stopScreenShare]);
+    const handleSwapViews = () => { if (remoteScreenStream) { setPrimaryView(prev => prev === 'camera' ? 'screen' : 'camera'); } };
     
     useEffect(() => {
         if (sessionStatus !== 'authenticated' || !roomId || pusherRef.current) return;
-        
-        let pc = new RTCPeerConnection(ICE_SERVERS);
-        peerConnectionRef.current = pc;
-        const isInitiator = session.user.role === 'ADMIN';
 
-        setConnectionStatus("Łączenie z serwerem...");
-        const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
-            cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
-            authEndpoint: '/api/pusher/auth',
-            auth: { params: { userId: session.user.id } }
-        });
-        pusherRef.current = pusher;
-        const channel = pusher.subscribe(`presence-room-${roomId}`) as PresenceChannel;
+        let isCleanupDone = false;
 
-        const cleanup = () => {
-            if (pusherRef.current) {
-                pusherRef.current.disconnect();
-                pusherRef.current = null;
-            }
-            if (peerConnectionRef.current) {
-                peerConnectionRef.current.close();
-                peerConnectionRef.current = null;
-            }
-            localStreamRef.current?.getTracks().forEach(t => t.stop());
-            localScreenStreamRef.current?.getTracks().forEach(t => t.stop());
-        };
-
-        const onConnectionStateChange = () => { if (pc) { setConnectionStatus(pc.connectionState); if (['disconnected', 'closed', 'failed'].includes(pc.connectionState)) handleHangUp(); }};
-        const onIceCandidate = (event: RTCPeerConnectionIceEvent) => { if (event.candidate) sendSignal('ice-candidate', event.candidate); };
-        const onTrack = (event: RTCTrackEvent) => {
-            const stream = event.streams[0];
-            if (stream) {
-                const isScreen = !!event.track.getSettings().displaySurface;
-                if (isScreen) {
-                    setRemoteScreenStream(stream);
-                    setPrimaryView('screen');
-                } else {
-                    setRemoteCameraStream(stream);
-                }
-            }
-        };
-
-        const createOffer = async () => {
-            if (pc.signalingState !== 'stable') return;
+        const initialize = async () => {
+            setConnectionStatus("Łączenie...");
             try {
-                const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
-                await pc.setLocalDescription(offer);
-                sendSignal('offer', offer);
-            } catch (e) { console.error("Error creating offer:", e); }
-        };
-        const handleOffer = async (data: any) => {
-            if (!isInitiator) {
-                try {
-                    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-                    pendingCandidatesRef.current.forEach(c => pc.addIceCandidate(c));
-                    pendingCandidatesRef.current = [];
-                    const answer = await pc.createAnswer();
-                    await pc.setLocalDescription(answer);
-                    sendSignal('answer', answer);
-                } catch (e) { console.error("Error handling offer:", e); }
-            }
-        };
-        const handleAnswer = async (data: any) => {
-            if (isInitiator) {
-                try {
-                    await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-                    pendingCandidatesRef.current.forEach(c => pc.addIceCandidate(c));
-                    pendingCandidatesRef.current = [];
-                } catch(e) { console.error("Error setting remote description:", e); }
-            }
-        };
-        const handleRemoteIceCandidate = async (data: any) => {
-            if (data.candidate && pc.signalingState !== 'closed') {
-                try {
-                    if (pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-                    else pendingCandidatesRef.current.push(new RTCIceCandidate(data.candidate));
-                } catch (e) { console.error("Błąd dodawania kandydata ICE:", e); }
-            }
-        };
+                const [channel, stream] = await Promise.all([
+                    new Promise<PresenceChannel>((resolve, reject) => {
+                        const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
+                            cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
+                            authEndpoint: '/api/pusher/auth',
+                            auth: { params: { userId: session!.user.id } }
+                        });
+                        pusherRef.current = pusher;
+                        const channel = pusher.subscribe(`presence-room-${roomId}`) as PresenceChannel;
+                        channel.bind('pusher:subscription_succeeded', () => resolve(channel));
+                        channel.bind('pusher:subscription_error', (err: any) => reject(new Error(`Pusher Auth Error: ${err.status}`)));
+                    }),
+                    getMediaStreamWithFallback()
+                ]);
 
-        channel.bind('pusher:subscription_succeeded', async () => {
-            setConnectionStatus("Pobieranie kamery...");
-            try {
-                const stream = await getMediaStreamWithFallback();
+                if (isCleanupDone) return;
+
+                setConnectionStatus("Konfiguracja połączenia...");
                 localStreamRef.current = stream;
                 if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+
+                const pc = new RTCPeerConnection(ICE_SERVERS);
+                peerConnectionRef.current = pc;
+                const isInitiator = session.user.role === 'ADMIN';
+
                 stream.getTracks().forEach(track => {
                     const sender = pc.addTrack(track, stream);
                     if (track.kind === 'video') videoSenderRef.current = sender;
                 });
-                pc.onicecandidate = onIceCandidate;
-                pc.ontrack = onTrack;
-                pc.onconnectionstatechange = onConnectionStateChange;
-                channel.bind('webrtc-offer', handleOffer);
-                channel.bind('webrtc-answer', handleAnswer);
-                channel.bind('webrtc-ice-candidate', handleRemoteIceCandidate);
-                channel.bind('hang-up', handleHangUp);
-
-                if (isInitiator && channel.members.count > 1) {
-                    createOffer();
+                
+                const createOffer = async () => {
+                    if (pc.signalingState !== 'stable') return;
+                    try {
+                        const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+                        await pc.setLocalDescription(offer);
+                        sendSignal('offer', offer);
+                    } catch (e) { console.error("Błąd tworzenia oferty:", e); }
+                };
+                
+                pc.onconnectionstatechange = () => { if (pc) { setConnectionStatus(pc.connectionState); if (['disconnected', 'closed', 'failed'].includes(pc.connectionState)) handleHangUp(); }};
+                pc.onicecandidate = (event) => { if (event.candidate) sendSignal('ice-candidate', event.candidate); };
+                pc.ontrack = (event) => { const stream = event.streams[0]; if (stream) { const isScreen = !!event.track.getSettings().displaySurface; if (isScreen) { setRemoteScreenStream(stream); setPrimaryView('screen'); } else { setRemoteCameraStream(stream); } }};
+                
+                channel.bind('webrtc-offer', async (data: any) => { if (!isInitiator) { try { await pc.setRemoteDescription(new RTCSessionDescription(data.offer)); pendingCandidatesRef.current.forEach(c => pc.addIceCandidate(c)); pendingCandidatesRef.current = []; const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); sendSignal('answer', answer); } catch (e) { console.error("Błąd obsługi oferty:", e); } }});
+                channel.bind('webrtc-answer', async (data: any) => { if (isInitiator) { try { await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); pendingCandidatesRef.current.forEach(c => pc.addIceCandidate(c)); pendingCandidatesRef.current = []; } catch (e) { console.error("Błąd ustawiania odpowiedzi:", e); } }});
+                channel.bind('webrtc-ice-candidate', async (data: any) => { if (data.candidate && pc.signalingState !== 'closed') { try { if (pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); else pendingCandidatesRef.current.push(new RTCIceCandidate(data.candidate)); } catch (e) { console.error("Błąd dodawania kandydata ICE:", e); } }});
+                channel.bind('call-ended', handleHangUp);
+                
+                if (isInitiator) {
+                    if (channel.members.count > 1) { createOffer(); } 
+                    else { channel.bind('pusher:member_added', createOffer); }
                 }
-            } catch (e: any) {
-                setHasMediaError(true);
-                setConnectionStatus(handleMediaStreamError(e));
-            }
-        });
-        
-        if (isInitiator) {
-            channel.bind('pusher:member_added', createOffer);
-        }
 
-        return cleanup;
+            } catch (error: any) {
+                console.error("❌ Błąd podczas inicjalizacji:", error);
+                setHasMediaError(true);
+                setConnectionStatus(handleMediaStreamError(error) || "Nieznany błąd inicjalizacji");
+            }
+        };
+        
+        initialize();
+
+        return () => {
+            isCleanupDone = true;
+            if (pusherRef.current) pusherRef.current.disconnect();
+            if (peerConnectionRef.current) peerConnectionRef.current.close();
+            localStreamRef.current?.getTracks().forEach(t => t.stop());
+            localScreenStreamRef.current?.getTracks().forEach(t => t.stop());
+        };
     }, [roomId, sessionStatus, session, handleHangUp, sendSignal]);
     
     const mainStream = primaryView === 'screen' ? remoteScreenStream : remoteCameraStream;
