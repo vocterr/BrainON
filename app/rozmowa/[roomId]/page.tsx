@@ -277,7 +277,7 @@ export default function RoomPage() {
                 // KROK 2: Stwórz połączenie WebRTC with aggressive settings
                 const pc = new RTCPeerConnection({
                     ...ICE_SERVERS,
-                    iceCandidatePoolSize: 10, // Pre-gather more candidates
+                    iceCandidatePoolSize: 30, // Pre-gather more candidates
                 });
                 peerConnectionRef.current = pc;
 

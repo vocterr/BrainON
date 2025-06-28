@@ -86,7 +86,7 @@ export const MenuTopbar = ({ isMenuClicked, setIsMenuClicked }: {
                         >
                             <motion.div variants={itemVariants} onClick={() => handleNavigation("/")} className="text-center cursor-pointer">
                                 <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600 text-5xl">
-                                    korki24.<b className="bg-gradient-to-r from-amber-600 to-lime-600 bg-clip-text text-transparent ">pl</b>
+                                    korki360.<b className="bg-gradient-to-r from-amber-600 to-lime-600 bg-clip-text text-transparent ">pl</b>
                                 </span>
                                 <p className="font-sans text-purple-200/70 mt-2">Nawiguj do sukcesu</p>
                             </motion.div>

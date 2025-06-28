@@ -118,7 +118,7 @@ export default function Topbar() {
                                 className="flex items-center gap-2 text-3xl text-white drop-shadow-lg cursor-pointer"
                             >
                                 <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600">
-                                    korki24.<b className="bg-gradient-to-r from-amber-600 to-lime-600 bg-clip-text text-transparent ">pl</b>
+                                    korki360.<b className="bg-gradient-to-r from-amber-600 to-lime-600 bg-clip-text text-transparent ">pl</b>
                                 </span>
                             </motion.button>
                         </motion.div>
