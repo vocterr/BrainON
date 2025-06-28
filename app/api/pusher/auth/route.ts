@@ -14,7 +14,7 @@ const pusher = new Pusher({
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
 
-  // Jeśli użytkownik nie jest zalogowany, odrzuć próbę
+  // If user is not logged in, reject the auth attempt
   if (!session?.user?.id) {
     return new Response('Unauthorized', { status: 401 });
   }
@@ -27,33 +27,32 @@ export async function POST(request: Request) {
     user_id: session.user.id,
     user_info: {
       name: session.user.name,
+      email: session.user.email,
       role: session.user.role
     }
   };
 
   try {
-    // ==================================================================
-    // POPRAWKA: Upraszczamy logikę. Jeśli kanał jest typu 'presence',
-    // zawsze autoryzujemy go, dodając dane użytkownika.
-    // Obejmuje to zarówno 'presence-online', jak i 'presence-room-...'.
-    // ==================================================================
+    // Handle presence channels (including presence-online and presence-room-*)
     if (channelName.startsWith('presence-')) {
-        const authResponse = pusher.authorizeChannel(socketId, channelName, userData);
-        return NextResponse.json(authResponse);
+      const authResponse = pusher.authorizeChannel(socketId, channelName, userData);
+      return NextResponse.json(authResponse);
     }
     
-    // Prywatne kanały autoryzujemy bez dodatkowych danych
+    // Handle private channels (for user-specific channels)
     if (channelName.startsWith('private-')) {
+      // Only allow users to subscribe to their own private channel
+      if (channelName === `private-user-${session.user.id}`) {
         const authResponse = pusher.authorizeChannel(socketId, channelName);
         return NextResponse.json(authResponse);
+      }
     }
 
-    // Jeśli kanał nie pasuje do żadnego wzorca, odrzuć
+    // Reject any other channel patterns
     return new Response('Forbidden', { status: 403 });
 
   } catch (error) {
-    console.error("Błąd autoryzacji Pushera:", error);
-    // Zwracamy 403 również w przypadku wewnętrznego błędu, aby być bezpiecznym
-    return new Response('Forbidden', { status: 403 });
+    console.error("Pusher auth error:", error);
+    return new Response('Internal Server Error', { status: 500 });
   }
 }

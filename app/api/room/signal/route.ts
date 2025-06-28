@@ -20,7 +20,6 @@ export async function POST(request: Request) {
   const { roomId, type, data } = await request.json();
 
   try {
-    // Map signal types to Pusher events
     const eventMap: Record<string, string> = {
       'offer': 'webrtc-offer',
       'answer': 'webrtc-answer',
@@ -32,11 +31,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid signal type' }, { status: 400 });
     }
 
-    // Send the signal to all peers in the room
+    // FIXED: Use presence channel instead of private channel
     await pusher.trigger(
-      `private-room-${roomId}`,
+      `presence-room-${roomId}`,
       event,
-      { [type.replace('-', '')]: data }
+      { [type.replace('-', '')]: data },
+      { socket_id: request.headers.get('x-pusher-socket-id') || undefined }
     );
 
     return NextResponse.json({ success: true });
