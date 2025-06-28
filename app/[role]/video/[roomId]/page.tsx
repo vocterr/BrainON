@@ -12,7 +12,6 @@ import {
 } from 'react-icons/fi';
 import { ICE_SERVERS, getMediaStreamWithFallback, handleMediaStreamError } from '@/lib/webrtc-utils';
 
-// Hook do wykrywania urządzeń mobilnych
 const useIsMobile = (breakpoint = 768) => {
     const [isMobile, setIsMobile] = useState(false);
     useEffect(() => {
@@ -26,23 +25,35 @@ const useIsMobile = (breakpoint = 768) => {
     return isMobile;
 };
 
-// Sub-komponenty
-const VideoPlaceholder = ({ text, isError = false }: { text: string, isError?: boolean }) => ( <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-3"> {isError ? <FiAlertTriangle className="text-red-500" size={32} /> : <FiLoader className="animate-spin" size={32} />} <span className={`text-lg font-medium mt-2 text-center ${isError ? 'text-red-500' : ''}`}>{text}</span> </div> );
-const ControlButton = ({ icon, offIcon, isToggled, onToggle, activeClass = 'bg-cyan-500/80', disabled = false, title = '' }: { icon: React.ReactElement; offIcon?: React.ReactElement; isToggled: boolean; onToggle: () => void; activeClass?: string, disabled?: boolean, title?: string }) => ( <button onClick={onToggle} disabled={disabled} title={title} className={`p-4 rounded-full transition-colors ${disabled ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : (isToggled ? activeClass + ' text-white' : 'bg-slate-700/80 text-white hover:bg-slate-600')}`} > {isToggled ? (offIcon || icon) : icon} </button> );
+const VideoPlaceholder = ({ text, isError = false }: { text: string, isError?: boolean }) => (
+    <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-3">
+        {isError ? <FiAlertTriangle className="text-red-500" size={32} /> : <FiLoader className="animate-spin" size={32} />}
+        <span className={`text-lg font-medium mt-2 text-center ${isError ? 'text-red-500' : ''}`}>{text}</span>
+    </div>
+);
 
-// Główny Komponent Strony
+const ControlButton = ({ icon, offIcon, isToggled, onToggle, activeClass = 'bg-cyan-500/80', disabled = false, title = '' }: { icon: React.ReactElement; offIcon?: React.ReactElement; isToggled: boolean; onToggle: () => void; activeClass?: string, disabled?: boolean, title?: string }) => (
+    <button 
+        onClick={onToggle} 
+        disabled={disabled}
+        title={title}
+        className={`p-4 rounded-full transition-colors ${disabled ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : (isToggled ? activeClass + ' text-white' : 'bg-slate-700/80 text-white hover:bg-slate-600')}`}
+    >
+        {isToggled ? (offIcon || icon) : icon}
+    </button>
+);
+
 export default function RoomPage() {
     const { data: session, status: sessionStatus } = useSession();
     const router = useRouter();
     const params = useParams();
-    const roomId = params.roomId as string;
+    const roomId = (params.roomId || params.id) as string;
     
     const isMobile = useIsMobile();
     
     const localVideoRef = useRef<HTMLVideoElement>(null);
     const remoteVideoRef = useRef<HTMLVideoElement>(null);
     const remoteVideoPiPRef = useRef<HTMLVideoElement>(null);
-
     const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
     const localStreamRef = useRef<MediaStream | null>(null);
     const localScreenStreamRef = useRef<MediaStream | null>(null);
@@ -67,92 +78,108 @@ export default function RoomPage() {
         }
     }, []);
 
-    const sendSignal = useCallback(async (type: string, data: any) => { if (!roomId) return; await fetch('/api/room/signal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId, type, data }), }); }, [roomId]);
-    const handleHangUp = useCallback(async () => { if (isCallEnded) return; setIsCallEnded(true); setConnectionStatus("Rozłączanie..."); await fetch('/api/room/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId, event: 'hang-up' }) }); pusherRef.current?.disconnect(); peerConnectionRef.current?.close(); localStreamRef.current?.getTracks().forEach(track => track.stop()); localScreenStreamRef.current?.getTracks().forEach(track => track.stop()); setTimeout(() => { const redirectUrl = session?.user?.role === 'ADMIN' ? '/admin' : '/moje-terminy'; router.push(redirectUrl); }, 1500); }, [roomId, session, router, isCallEnded]);
-    const toggleMute = useCallback(() => { if (localStreamRef.current) { localStreamRef.current.getAudioTracks().forEach(track => { track.enabled = !track.enabled; setIsMuted(!track.enabled); }); } }, []);
-    const toggleCamera = useCallback(() => { if (localStreamRef.current) { localStreamRef.current.getVideoTracks().forEach(track => { track.enabled = !track.enabled; setIsCameraOff(!track.enabled); }); } }, []);
+    const sendSignal = useCallback(async (type: string, data: any) => {
+        if (!roomId) return;
+        await fetch('/api/room/signal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId, type, data }) });
+    }, [roomId]);
+
+    const handleHangUp = useCallback(async () => {
+        if (isCallEnded) return;
+        setIsCallEnded(true);
+        setConnectionStatus("Rozłączanie...");
+        await fetch('/api/room/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId, event: 'hang-up' }) });
+        pusherRef.current?.disconnect();
+        peerConnectionRef.current?.close();
+        localStreamRef.current?.getTracks().forEach(track => track.stop());
+        localScreenStreamRef.current?.getTracks().forEach(track => track.stop());
+        setTimeout(() => {
+            const redirectUrl = session?.user?.role === 'ADMIN' ? '/admin' : '/moje-terminy';
+            router.push(redirectUrl);
+        }, 1500);
+    }, [roomId, session, router, isCallEnded]);
+
+    const toggleMute = useCallback(() => { localStreamRef.current?.getAudioTracks().forEach(track => { track.enabled = !track.enabled; setIsMuted(!track.enabled); }); }, []);
+    const toggleCamera = useCallback(() => { localStreamRef.current?.getVideoTracks().forEach(track => { track.enabled = !track.enabled; setIsCameraOff(!track.enabled); }); }, []);
     const stopScreenShare = useCallback(() => { if (!videoSenderRef.current || !localStreamRef.current) return; localScreenStreamRef.current?.getTracks().forEach(track => track.stop()); const cameraTrack = localStreamRef.current.getVideoTracks()[0]; if (cameraTrack) { videoSenderRef.current.replaceTrack(cameraTrack); } setIsSharingScreen(false); }, []);
     const handleToggleScreenShare = useCallback(async () => { if (isSharingScreen) { stopScreenShare(); } else { try { const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true }); const screenTrack = screenStream.getVideoTracks()[0]; if (!videoSenderRef.current || !screenTrack) return; screenTrack.onended = () => stopScreenShare(); videoSenderRef.current.replaceTrack(screenTrack); localScreenStreamRef.current = screenStream; setIsSharingScreen(true); } catch (error) { console.error("Błąd udostępniania ekranu:", error); } } }, [isSharingScreen, stopScreenShare]);
     const handleSwapViews = () => { if (remoteScreenStream) setPrimaryView(prev => prev === 'camera' ? 'screen' : 'camera'); };
     
     useEffect(() => {
         if (sessionStatus !== 'authenticated' || !roomId) return;
-
-        let pc: RTCPeerConnection | null = null;
-        let pusher: Pusher | null = null;
+        let isCleanupDone = false;
 
         const initialize = async () => {
+            setConnectionStatus("Przygotowywanie...");
             try {
-                // KROK 1: POBIERZ MEDIA
-                setConnectionStatus("Pobieranie kamery...");
+                // KROK 1: Pobierz media
                 const stream = await getMediaStreamWithFallback();
+                if (isCleanupDone) { stream.getTracks().forEach(t => t.stop()); return; }
                 localStreamRef.current = stream;
-                if (localVideoRef.current) {
-                    localVideoRef.current.srcObject = stream;
-                }
+                if (localVideoRef.current) localVideoRef.current.srcObject = stream;
                 setHasMediaError(false);
 
-                // KROK 2: STWÓRZ POŁĄCZENIE WEBRTC
-                setConnectionStatus("Konfiguracja połączenia...");
-                pc = new RTCPeerConnection(ICE_SERVERS);
+                // KROK 2: Stwórz połączenie WebRTC
+                const pc = new RTCPeerConnection(ICE_SERVERS);
                 peerConnectionRef.current = pc;
                 stream.getTracks().forEach(track => {
-                    const sender = pc!.addTrack(track, stream);
-                    if (track.kind === 'video') videoSenderRef.current = sender;
+                    if (track.kind === 'video') videoSenderRef.current = pc.addTrack(track, stream);
+                    else pc.addTrack(track, stream);
                 });
-                pc.onicecandidate = (event) => { if (event.candidate) sendSignal('ice-candidate', event.candidate); };
-                pc.ontrack = (event) => { if (event.streams && event.streams[0]) { const isScreen = !!event.track.getSettings().displaySurface; if (isScreen) { setRemoteScreenStream(event.streams[0]); setPrimaryView('screen'); } else { setRemoteCameraStream(event.streams[0]); } } };
-                pc.onconnectionstatechange = () => { if (pc) { setConnectionStatus(pc.connectionState); if (['disconnected', 'closed', 'failed'].includes(pc.connectionState)) handleHangUp(); } };
-                
-                // KROK 3: POŁĄCZ SIĘ Z PUSHEREM
-                setConnectionStatus("Łączenie z serwerem...");
-                pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
+
+                // KROK 3: Połącz się z Pusherem
+                const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
                     cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
                     authEndpoint: '/api/pusher/auth',
-                    auth: { params: { userId: session.user!.id } }
+                    auth: { params: { userId: session.user.id } }
                 });
                 pusherRef.current = pusher;
                 const channel = pusher.subscribe(`presence-room-${roomId}`) as PresenceChannel;
 
-                const handleOffer = async (data: any) => { if (session.user.role !== 'ADMIN') { await pc!.setRemoteDescription(new RTCSessionDescription(data.offer)); const answer = await pc!.createAnswer(); await pc!.setLocalDescription(answer); sendSignal('answer', answer); }};
-                const handleAnswer = async (data: any) => { if (session.user.role === 'ADMIN') { await pc!.setRemoteDescription(new RTCSessionDescription(data.answer)); }};
-                const handleIceCandidate = async (data: any) => { if (data.candidate) { await pc!.addIceCandidate(new RTCIceCandidate(data.candidate)); }};
-
-                // KROK 4: NASŁUCHUJ NA SYGNAŁY DOPIERO PO NAWIĄZANIU POŁĄCZENIA
-                channel.bind('webrtc-offer', handleOffer);
-                channel.bind('webrtc-answer', handleAnswer);
-                channel.bind('webrtc-ice-candidate', handleIceCandidate);
+                // KROK 4: Ustaw wszystkie listenery
+                const isInitiator = session.user.role === 'ADMIN';
+                const createOffer = async () => { if (pc.signalingState === 'stable') { try { setConnectionStatus("Tworzenie oferty..."); const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true }); await pc.setLocalDescription(offer); sendSignal('offer', offer); } catch (e) { console.error("Błąd tworzenia oferty:", e); }}};
+                
+                pc.onicecandidate = e => e.candidate && sendSignal('ice-candidate', e.candidate);
+                pc.ontrack = e => { const s = e.streams[0]; if (s) { e.track.getSettings().displaySurface ? setRemoteScreenStream(s) : setRemoteCameraStream(s); if(e.track.getSettings().displaySurface) setPrimaryView('screen'); }};
+                pc.onconnectionstatechange = () => { if (pc) { setConnectionStatus(pc.connectionState); if (['disconnected', 'closed', 'failed'].includes(pc.connectionState)) handleHangUp(); }};
+                
+                channel.bind('webrtc-offer', async (data: any) => { if (!isInitiator) { await pc.setRemoteDescription(new RTCSessionDescription(data.offer)); const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); sendSignal('answer', answer); }});
+                channel.bind('webrtc-answer', async (data: any) => { if (isInitiator) { await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); }});
+                channel.bind('webrtc-ice-candidate', async (data: any) => { if (data.candidate && pc.signalingState !== 'closed') { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); }});
                 channel.bind('call-ended', handleHangUp);
 
-                // KROK 5: ADMIN CZEKA NA DOŁĄCZENIE STUDENTA, ABY WYSŁAĆ OFERTĘ
-                if (session.user.role === 'ADMIN') {
-                    channel.bind('pusher:member_added', async () => {
-                        console.log("Student dołączył, wysyłam ofertę...");
-                        const offer = await pc!.createOffer();
-                        await pc!.setLocalDescription(offer);
-                        sendSignal('offer', offer);
+                // NOWA, UPROSZCZONA LOGIKA: Admin reaguje tylko na dołączenie studenta
+                if (isInitiator) {
+                    channel.bind('pusher:member_added', (member: { id: string }) => {
+                        if (member.id !== session.user.id) {
+                            console.log("Peer dołączył, tworzę ofertę...");
+                            createOffer();
+                        }
                     });
                 }
                 
+                // KROK 5: Poinformuj innych, że jesteś w pokoju
                 setConnectionStatus("Oczekiwanie na drugiego uczestnika...");
+                await fetch('/api/room/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId }) });
 
             } catch (error: any) {
                 console.error("❌ Błąd podczas inicjalizacji:", error);
                 setHasMediaError(true);
-                setConnectionStatus(handleMediaStreamError(error) || "Nieznany błąd inicjalizacji");
+                setConnectionStatus(handleMediaStreamError(error));
             }
         };
-
+        
         initialize();
 
         return () => {
+            isCleanupDone = true;
             if (pusherRef.current) pusherRef.current.disconnect();
             if (peerConnectionRef.current) peerConnectionRef.current.close();
             localStreamRef.current?.getTracks().forEach(t => t.stop());
             localScreenStreamRef.current?.getTracks().forEach(t => t.stop());
         };
     }, [roomId, sessionStatus, session, handleHangUp, sendSignal]);
-
+    
     const mainStream = primaryView === 'screen' ? remoteScreenStream : remoteCameraStream;
     const pipStream = primaryView === 'screen' ? remoteCameraStream : remoteScreenStream;
 
