@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 import Pusher, { PresenceChannel } from 'pusher-js';
@@ -11,22 +11,8 @@ import {
     FiMonitor, FiAirplay 
 } from 'react-icons/fi';
 import { ICE_SERVERS, getMediaStreamWithFallback, handleMediaStreamError } from '@/lib/webrtc-utils';
+import { useIsMobile } from '@/lib/useIsMobile';
 
-// Hook do wykrywania urządzeń mobilnych
-const useIsMobile = (breakpoint = 768) => {
-    const [isMobile, setIsMobile] = useState(false);
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const checkDevice = () => setIsMobile(window.innerWidth < breakpoint);
-            checkDevice();
-            window.addEventListener('resize', checkDevice);
-            return () => window.removeEventListener('resize', checkDevice);
-        }
-    }, [breakpoint]);
-    return isMobile;
-};
-
-// Sub-komponenty
 const VideoPlaceholder = ({ text, isError = false }: { text: string, isError?: boolean }) => (
     <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-3">
         {isError ? <FiAlertTriangle className="text-red-500" size={32} /> : <FiLoader className="animate-spin" size={32} />}
@@ -45,9 +31,7 @@ const ControlButton = ({ icon, offIcon, isToggled, onToggle, activeClass = 'bg-c
     </button>
 );
 
-
-// Główny Komponent Strony Rozmowy
-export default function RoomComponent({ roomId }: { roomId: string }) {
+ function RoomComponent({ roomId }: { roomId: string }) {
     const { data: session, status: sessionStatus } = useSession();
     const router = useRouter();
     const isMobile = useIsMobile();
@@ -61,7 +45,6 @@ export default function RoomComponent({ roomId }: { roomId: string }) {
     const localScreenStreamRef = useRef<MediaStream | null>(null);
     const videoSenderRef = useRef<RTCRtpSender | null>(null);
     const pusherRef = useRef<Pusher | null>(null);
-    const channelRef = useRef<PresenceChannel | null>(null);
     const pendingCandidatesRef = useRef<RTCIceCandidate[]>([]);
 
     const [isMuted, setIsMuted] = useState(false);
@@ -172,13 +155,12 @@ export default function RoomComponent({ roomId }: { roomId: string }) {
     };
     
     useEffect(() => {
-        if (sessionStatus !== 'authenticated' || !roomId || pusherRef.current) return;
-
+        if (sessionStatus !== 'authenticated' || !roomId) return;
+        
         let pc = new RTCPeerConnection(ICE_SERVERS);
         peerConnectionRef.current = pc;
         const isInitiator = session.user.role === 'ADMIN';
 
-        setConnectionStatus("Łączenie z serwerem...");
         const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
             cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
             authEndpoint: '/api/pusher/auth',
@@ -186,8 +168,7 @@ export default function RoomComponent({ roomId }: { roomId: string }) {
         });
         pusherRef.current = pusher;
         const channel = pusher.subscribe(`presence-room-${roomId}`) as PresenceChannel;
-        channelRef.current = channel;
-
+        
         const onConnectionStateChange = () => {
             if (pc) {
                 setConnectionStatus(pc.connectionState);
@@ -213,11 +194,10 @@ export default function RoomComponent({ roomId }: { roomId: string }) {
         const createOffer = async () => {
             if (pc.signalingState !== 'stable') return;
             try {
-                setConnectionStatus("Tworzenie połączenia...");
                 const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
                 await pc.setLocalDescription(offer);
                 sendSignal('offer', offer);
-            } catch (e) { console.error("Błąd tworzenia oferty:", e); }
+            } catch (e) { console.error("Error creating offer:", e); }
         };
         const handleOffer = async (data: any) => {
             if (!isInitiator) {
@@ -228,7 +208,7 @@ export default function RoomComponent({ roomId }: { roomId: string }) {
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
                     sendSignal('answer', answer);
-                } catch (e) { console.error("Błąd obsługi oferty:", e); }
+                } catch (e) { console.error("Error handling offer:", e); }
             }
         };
         const handleAnswer = async (data: any) => {
@@ -237,69 +217,58 @@ export default function RoomComponent({ roomId }: { roomId: string }) {
                     await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
                     pendingCandidatesRef.current.forEach(c => pc.addIceCandidate(c));
                     pendingCandidatesRef.current = [];
-                } catch(e) { console.error("Błąd ustawiania odpowiedzi:", e); }
+                } catch(e) { console.error("Error setting remote description:", e); }
             }
         };
         const handleRemoteIceCandidate = async (data: any) => {
             if (data.candidate && pc.signalingState !== 'closed') {
                 try {
-                    if (pc.remoteDescription) {
-                        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-                    } else {
-                        pendingCandidatesRef.current.push(new RTCIceCandidate(data.candidate));
-                    }
-                } catch (e) { console.error("Błąd dodawania kandydata ICE:", e); }
+                    if (pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                    else pendingCandidatesRef.current.push(new RTCIceCandidate(data.candidate));
+                } catch (e) { console.error("Error adding ICE candidate:", e); }
             }
         };
 
-        channel.bind('pusher:subscription_succeeded', async () => {
-            setConnectionStatus("Pobieranie kamery...");
-            try {
-                const stream = await getMediaStreamWithFallback();
-                localStreamRef.current = stream;
-                if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-                stream.getTracks().forEach(track => {
-                    const sender = pc.addTrack(track, stream);
-                    if (track.kind === 'video') videoSenderRef.current = sender;
-                });
+        const initializeCall = async () => {
+            pc.onconnectionstatechange = onConnectionStateChange;
+            pc.onicecandidate = onIceCandidate;
+            pc.ontrack = onTrack;
+            
+            channel.bind('webrtc-offer', handleOffer);
+            channel.bind('webrtc-answer', handleAnswer);
+            channel.bind('webrtc-ice-candidate', handleRemoteIceCandidate);
+            channel.bind('call-ended', handleHangUp);
 
-                pc.onicecandidate = onIceCandidate;
-                pc.ontrack = onTrack;
-                pc.onconnectionstatechange = onConnectionStateChange;
-                channel.bind('webrtc-offer', handleOffer);
-                channel.bind('webrtc-answer', handleAnswer);
-                channel.bind('webrtc-ice-candidate', handleRemoteIceCandidate);
-                channel.bind('call-ended', handleHangUp);
-
-                await fetch('/api/room/join', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ roomId }),
-                });
-
-                if (isInitiator && channel.members.count > 1) {
-                    createOffer();
+            channel.bind('pusher:subscription_succeeded', async () => {
+                setConnectionStatus("Pobieranie kamery...");
+                try {
+                    const stream = await getMediaStreamWithFallback();
+                    localStreamRef.current = stream;
+                    if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+                    stream.getTracks().forEach(track => {
+                        if (track.kind === 'video') videoSenderRef.current = pc.addTrack(track, stream);
+                        else pc.addTrack(track, stream);
+                    });
+                    
+                    if (isInitiator && channel.members.count > 1) {
+                        createOffer();
+                    }
+                } catch (e: any) {
+                    setHasMediaError(true);
+                    setConnectionStatus(handleMediaStreamError(e));
                 }
-
-            } catch (e: any) {
-                setHasMediaError(true);
-                setConnectionStatus(handleMediaStreamError(e));
+            });
+            
+            if (isInitiator) {
+                channel.bind('pusher:member_added', createOffer);
             }
-        });
+        };
         
-        channel.bind('pusher:member_added', () => {
-            if (isInitiator) createOffer();
-        });
+        initializeCall();
 
         return () => {
-            if (pusherRef.current) {
-                pusherRef.current.disconnect();
-                pusherRef.current = null;
-            }
-            if (peerConnectionRef.current) {
-                peerConnectionRef.current.close();
-                peerConnectionRef.current = null;
-            }
+            if (pusherRef.current) pusherRef.current.disconnect();
+            if (peerConnectionRef.current) peerConnectionRef.current.close();
             localStreamRef.current?.getTracks().forEach(t => t.stop());
             localScreenStreamRef.current?.getTracks().forEach(t => t.stop());
         };
@@ -308,8 +277,8 @@ export default function RoomComponent({ roomId }: { roomId: string }) {
     const mainStream = primaryView === 'screen' ? remoteScreenStream : remoteCameraStream;
     const pipStream = primaryView === 'screen' ? remoteCameraStream : remoteScreenStream;
 
-    useEffect(() => { if (remoteVideoRef.current) { remoteVideoRef.current.srcObject = mainStream; } }, [mainStream]);
-    useEffect(() => { if (remoteVideoPiPRef.current) { remoteVideoPiPRef.current.srcObject = pipStream; } }, [pipStream]);
+    useEffect(() => { if (remoteVideoRef.current) remoteVideoRef.current.srcObject = mainStream; }, [mainStream]);
+    useEffect(() => { if (remoteVideoPiPRef.current) remoteVideoPiPRef.current.srcObject = pipStream; }, [pipStream]);
     
     if (sessionStatus === 'loading') return <div className="w-full h-screen bg-slate-900 flex items-center justify-center"><FiLoader className="animate-spin text-white" size={48}/></div>;
     
@@ -367,3 +336,14 @@ export default function RoomComponent({ roomId }: { roomId: string }) {
     );
 }
 
+export default function PusherRoomPageWrapper() {
+    const params = useParams();
+    // Pobieramy ID pokoju z nowej struktury URL, gdzie dynamiczna część to 'id'
+    const roomId = params.id as string; 
+
+    if (!roomId) {
+        return <div>Ładowanie pokoju...</div>;
+    }
+
+    return <RoomComponent roomId={roomId} />;
+}
