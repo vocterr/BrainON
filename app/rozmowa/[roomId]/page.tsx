@@ -161,13 +161,29 @@ export default function RoomPage() {
         } 
     }, [isSharingScreen, stopScreenShare]);
     
+    const [showSwapHint, setShowSwapHint] = useState(true);
+    
+    // Hide swap hint after 5 seconds or after first swap
+    useEffect(() => {
+        if (remoteCameraStream && remoteScreenStream && showSwapHint) {
+            const timer = setTimeout(() => setShowSwapHint(false), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [remoteCameraStream, remoteScreenStream, showSwapHint]);
+    
     const handleSwapViews = () => { 
-        if (remoteScreenStream) setPrimaryView(prev => prev === 'camera' ? 'screen' : 'camera'); 
+        // Only allow swapping if we have both streams
+        if (remoteScreenStream && remoteCameraStream) {
+            setPrimaryView(prev => prev === 'camera' ? 'screen' : 'camera');
+            setShowSwapHint(false);
+        }
     };
     
     useEffect(() => {
         if (sessionStatus !== 'authenticated' || !roomId) return;
         let isCleanupDone = false;
+        let handleVisibilityChange: (() => void) | null = null;
+        let keepAliveInterval: NodeJS.Timeout | null = null;
 
         const initialize = async () => {
             setConnectionStatus("Przygotowywanie...");
@@ -239,21 +255,68 @@ export default function RoomPage() {
                 pc.ontrack = e => { 
                     const s = e.streams[0]; 
                     if (s) { 
-                        if (e.track.getSettings().displaySurface) {
+                        const trackSettings = e.track.getSettings();
+                        console.log('Received track:', e.track.kind, trackSettings);
+                        
+                        // Check if this is a screen share track
+                        if (trackSettings.displaySurface || 
+                            (e.track.label && e.track.label.includes('screen'))) {
+                            console.log('Setting remote screen stream');
                             setRemoteScreenStream(s);
-                            setPrimaryView('screen');
-                        } else {
+                            
+                            // Handle when screen share ends
+                            e.track.onended = () => {
+                                console.log('Remote screen share ended');
+                                setRemoteScreenStream(null);
+                            };
+                            
+                            // Auto-switch to screen view when screen sharing starts
+                            setPrimaryView(current => {
+                                // Only switch if we're currently viewing camera
+                                return current === 'camera' ? 'screen' : current;
+                            });
+                        } else if (e.track.kind === 'video') {
+                            console.log('Setting remote camera stream');
                             setRemoteCameraStream(s);
+                            
+                            // Handle when camera ends
+                            e.track.onended = () => {
+                                console.log('Remote camera ended');
+                                setRemoteCameraStream(null);
+                            };
                         }
                     }
                 };
+                
+                // Track if we're reconnecting
+                let reconnectTimeout: NodeJS.Timeout | null = null;
                 
                 pc.onconnectionstatechange = () => { 
                     if (pc) { 
                         console.log('Connection state:', pc.connectionState);
                         setConnectionStatus(pc.connectionState); 
-                        if (['disconnected', 'closed', 'failed'].includes(pc.connectionState)) {
-                            handleHangUp(); 
+                        
+                        // Handle disconnection with grace period
+                        if (pc.connectionState === 'disconnected') {
+                            // Give it 10 seconds to reconnect before hanging up
+                            reconnectTimeout = setTimeout(() => {
+                                if (pc.connectionState === 'disconnected') {
+                                    console.log('Connection failed to recover, hanging up...');
+                                    handleHangUp();
+                                }
+                            }, 10000);
+                        } else if (pc.connectionState === 'connected') {
+                            // Clear any pending disconnect timeout
+                            if (reconnectTimeout) {
+                                clearTimeout(reconnectTimeout);
+                                reconnectTimeout = null;
+                            }
+                        } else if (['closed', 'failed'].includes(pc.connectionState)) {
+                            // These are terminal states, hang up immediately
+                            if (reconnectTimeout) {
+                                clearTimeout(reconnectTimeout);
+                            }
+                            handleHangUp();
                         }
                     }
                 };
@@ -312,7 +375,34 @@ export default function RoomPage() {
                     }
                 });
                 
-                // KROK 5: Status
+                // KROK 5: Handle page visibility changes
+                handleVisibilityChange = () => {
+                    if (document.hidden) {
+                        console.log('Page is hidden, maintaining connection...');
+                        // Optionally reduce video quality or pause non-essential features
+                    } else {
+                        console.log('Page is visible again');
+                        // Ensure connection is still good
+                        if (pc.connectionState === 'disconnected') {
+                            // Try to kickstart the connection
+                            pc.restartIce();
+                        }
+                    }
+                };
+                
+                document.addEventListener('visibilitychange', handleVisibilityChange);
+                
+                // KROK 6: Keep connection alive
+                keepAliveInterval = setInterval(() => {
+                    if (pc && pc.connectionState === 'connected') {
+                        // Send a small data channel message or check stats
+                        pc.getStats().then(stats => {
+                            console.log('Connection alive check at', new Date().toLocaleTimeString());
+                        });
+                    }
+                }, 5000); // Check every 5 seconds
+                
+                // KROK 7: Status
                 setConnectionStatus("Oczekiwanie na drugiego uczestnika...");
 
             } catch (error: any) {
@@ -326,6 +416,12 @@ export default function RoomPage() {
 
         return () => {
             isCleanupDone = true;
+            if (handleVisibilityChange) {
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
+            }
+            if (keepAliveInterval) {
+                clearInterval(keepAliveInterval);
+            }
             if (channelRef.current) channelRef.current.unsubscribe();
             if (pusherRef.current) pusherRef.current.disconnect();
             if (peerConnectionRef.current) peerConnectionRef.current.close();
@@ -333,6 +429,13 @@ export default function RoomPage() {
             localScreenStreamRef.current?.getTracks().forEach(t => t.stop());
         };
     }, [roomId, sessionStatus, session, handleHangUp, sendSignal]);
+    
+    // Handle when remote screen share ends
+    useEffect(() => {
+        if (!remoteScreenStream && primaryView === 'screen' && remoteCameraStream) {
+            setPrimaryView('camera');
+        }
+    }, [remoteScreenStream, primaryView, remoteCameraStream]);
     
     const mainStream = primaryView === 'screen' ? remoteScreenStream : remoteCameraStream;
     const pipStream = primaryView === 'screen' ? remoteCameraStream : remoteScreenStream;
@@ -364,15 +467,76 @@ export default function RoomPage() {
                  )}
              </AnimatePresence>
  
-             <div onClick={handleSwapViews} className={`w-full h-full flex items-center justify-center bg-black ${remoteScreenStream ? 'cursor-pointer' : ''}`}>
+             <div onClick={handleSwapViews} className={`relative w-full h-full flex items-center justify-center bg-black ${(remoteScreenStream && remoteCameraStream) ? 'cursor-pointer' : ''}`}>
                  <video ref={remoteVideoRef} autoPlay playsInline className={`w-full h-full object-contain`} />
                  {!mainStream && !isCallEnded && <VideoPlaceholder text={connectionStatus} isError={hasMediaError} />}
+                 
+                 {/* Show indicator when viewing screen share */}
+                 {primaryView === 'screen' && remoteScreenStream && remoteCameraStream && (
+                     <motion.div 
+                         initial={{ opacity: 0, y: -20 }}
+                         animate={{ opacity: 1, y: 0 }}
+                         className="absolute top-5 left-5 bg-black/50 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2"
+                     >
+                         <FiMonitor className="w-5 h-5 text-cyan-400" />
+                         <span className="text-white text-sm font-medium">Udostępniony ekran</span>
+                     </motion.div>
+                 )}
+                 
+                 {/* Show swap hint */}
+                 <AnimatePresence>
+                     {showSwapHint && remoteCameraStream && remoteScreenStream && (
+                         <motion.div
+                             initial={{ opacity: 0, y: 20 }}
+                             animate={{ opacity: 1, y: 0 }}
+                             exit={{ opacity: 0, y: 20 }}
+                             className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm rounded-lg px-4 py-2 flex items-center gap-2"
+                         >
+                             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                             </svg>
+                             <span className="text-white text-sm">Kliknij aby przełączyć widok</span>
+                         </motion.div>
+                     )}
+                 </AnimatePresence>
              </div>
  
              <AnimatePresence>
                 {pipStream && (
-                    <motion.div onClick={handleSwapViews} initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} drag dragConstraints={{ left: 0, right: window.innerWidth - 256, top: 0, bottom: window.innerHeight - 144 }} className="absolute bottom-28 right-5 w-64 h-40 cursor-pointer z-20">
-                        <video ref={remoteVideoPiPRef} autoPlay playsInline muted className="w-full h-full object-cover rounded-xl shadow-2xl border-2 border-white/20" />
+                    <motion.div 
+                        onClick={handleSwapViews} 
+                        initial={{ opacity: 0, scale: 0.8 }} 
+                        animate={{ opacity: 1, scale: 1 }} 
+                        exit={{ opacity: 0, scale: 0.8 }} 
+                        drag 
+                        dragConstraints={{ left: 0, right: window.innerWidth - 256, top: 0, bottom: window.innerHeight - 144 }} 
+                        className="absolute bottom-28 right-5 w-64 h-40 cursor-pointer z-20 group"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                    >
+                        <video 
+                            ref={remoteVideoPiPRef} 
+                            autoPlay 
+                            playsInline 
+                            muted 
+                            className="w-full h-full object-cover rounded-xl shadow-2xl border-2 border-white/20 group-hover:border-white/40 transition-all" 
+                        />
+                        {/* Show an icon indicator for screen share */}
+                        {primaryView === 'camera' && remoteScreenStream && (
+                            <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm rounded-md p-1.5">
+                                <FiMonitor className="w-4 h-4 text-white" />
+                            </div>
+                        )}
+                        {/* Show swap icon on hover */}
+                        {remoteCameraStream && remoteScreenStream && (
+                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center">
+                                <div className="bg-white/10 backdrop-blur-sm rounded-full p-3">
+                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                    </svg>
+                                </div>
+                            </div>
+                        )}
                     </motion.div>
                 )}
              </AnimatePresence>

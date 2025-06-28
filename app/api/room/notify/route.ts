@@ -20,8 +20,9 @@ export async function POST(request: Request) {
   const { roomId, event } = await request.json();
 
   try {
+    // Handle room notifications (like hang-up)
     if (event === 'hang-up') {
-      // FIXED: Use presence channel
+      // Use PRESENCE channel to match the frontend
       await pusher.trigger(
         `presence-room-${roomId}`,
         'call-ended',
