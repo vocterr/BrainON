@@ -12,6 +12,7 @@ import {
 } from 'react-icons/fi';
 import { ICE_SERVERS, getMediaStreamWithFallback, handleMediaStreamError } from '@/lib/webrtc-utils';
 
+// Hook do wykrywania urządzeń mobilnych
 const useIsMobile = (breakpoint = 768) => {
     const [isMobile, setIsMobile] = useState(false);
     useEffect(() => {
@@ -25,6 +26,7 @@ const useIsMobile = (breakpoint = 768) => {
     return isMobile;
 };
 
+// Sub-komponenty
 const VideoPlaceholder = ({ text, isError = false }: { text: string, isError?: boolean }) => (
     <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-3">
         {isError ? <FiAlertTriangle className="text-red-500" size={32} /> : <FiLoader className="animate-spin" size={32} />}
@@ -43,11 +45,12 @@ const ControlButton = ({ icon, offIcon, isToggled, onToggle, activeClass = 'bg-c
     </button>
 );
 
+// Główny Komponent Strony
 export default function RoomPage() {
     const { data: session, status: sessionStatus } = useSession();
     const router = useRouter();
     const params = useParams();
-    const roomId = (params.roomId || params.id) as string;
+    const roomId = params.roomId as string;
     
     const isMobile = useIsMobile();
     
@@ -100,79 +103,97 @@ export default function RoomPage() {
 
     const toggleMute = useCallback(() => { localStreamRef.current?.getAudioTracks().forEach(track => { track.enabled = !track.enabled; setIsMuted(!track.enabled); }); }, []);
     const toggleCamera = useCallback(() => { localStreamRef.current?.getVideoTracks().forEach(track => { track.enabled = !track.enabled; setIsCameraOff(!track.enabled); }); }, []);
-    const stopScreenShare = useCallback(() => { if (!videoSenderRef.current || !localStreamRef.current) return; localScreenStreamRef.current?.getTracks().forEach(track => track.stop()); const cameraTrack = localStreamRef.current.getVideoTracks()[0]; if (cameraTrack) { videoSenderRef.current.replaceTrack(cameraTrack); } setIsSharingScreen(false); }, []);
+    const stopScreenShare = useCallback(() => { if (!videoSenderRef.current || !localStreamRef.current) return; localScreenStreamRef.current?.getTracks().forEach(track => track.stop()); const cameraTrack = localStreamRef.current.getVideoTracks()[0]; if (cameraTrack) videoSenderRef.current.replaceTrack(cameraTrack); setIsSharingScreen(false); }, []);
     const handleToggleScreenShare = useCallback(async () => { if (isSharingScreen) { stopScreenShare(); } else { try { const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true }); const screenTrack = screenStream.getVideoTracks()[0]; if (!videoSenderRef.current || !screenTrack) return; screenTrack.onended = () => stopScreenShare(); videoSenderRef.current.replaceTrack(screenTrack); localScreenStreamRef.current = screenStream; setIsSharingScreen(true); } catch (error) { console.error("Błąd udostępniania ekranu:", error); } } }, [isSharingScreen, stopScreenShare]);
     const handleSwapViews = () => { if (remoteScreenStream) setPrimaryView(prev => prev === 'camera' ? 'screen' : 'camera'); };
     
     useEffect(() => {
-        if (sessionStatus !== 'authenticated' || !roomId) return;
-        let isCleanupDone = false;
+        if (sessionStatus !== 'authenticated' || !roomId || pusherRef.current) return;
+
+        let pc: RTCPeerConnection | null = null;
+        let channel: PresenceChannel | null = null;
 
         const initialize = async () => {
             setConnectionStatus("Przygotowywanie...");
             try {
                 // KROK 1: Pobierz media
                 const stream = await getMediaStreamWithFallback();
-                if (isCleanupDone) { stream.getTracks().forEach(t => t.stop()); return; }
                 localStreamRef.current = stream;
                 if (localVideoRef.current) localVideoRef.current.srcObject = stream;
                 setHasMediaError(false);
 
-                // KROK 2: Stwórz połączenie WebRTC
-                const pc = new RTCPeerConnection(ICE_SERVERS);
+                // KROK 2: Stwórz połączenie WebRTC i dodaj do niego media
+                setConnectionStatus("Konfiguracja połączenia...");
+                pc = new RTCPeerConnection(ICE_SERVERS);
                 peerConnectionRef.current = pc;
                 stream.getTracks().forEach(track => {
-                    if (track.kind === 'video') videoSenderRef.current = pc.addTrack(track, stream);
-                    else pc.addTrack(track, stream);
+                    if (track.kind === 'video') videoSenderRef.current = pc!.addTrack(track, stream);
+                    else pc!.addTrack(track, stream);
                 });
 
-                // KROK 3: Połącz się z Pusherem
+                // KROK 3: Ustaw wszystkie handlery zdarzeń WebRTC
+                pc.onicecandidate = (event) => { if (event.candidate) sendSignal('ice-candidate', event.candidate); };
+                pc.ontrack = (event) => {
+                    const remoteStream = event.streams[0];
+                    if (remoteStream) {
+                        const isScreen = !!(event.track.getSettings().displaySurface);
+                        if (isScreen) {
+                            setRemoteScreenStream(remoteStream);
+                            setPrimaryView('screen');
+                        } else {
+                            setRemoteCameraStream(remoteStream);
+                        }
+                    }
+                };
+                pc.onconnectionstatechange = () => { if (pc) { setConnectionStatus(pc.connectionState); if (['disconnected', 'closed', 'failed'].includes(pc.connectionState)) handleHangUp(); }};
+                
+                // KROK 4: Połącz się z Pusherem i nasłuchuj na sygnały
+                setConnectionStatus("Łączenie z serwerem...");
                 const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
                     cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
                     authEndpoint: '/api/pusher/auth',
                     auth: { params: { userId: session.user.id } }
                 });
                 pusherRef.current = pusher;
-                const channel = pusher.subscribe(`presence-room-${roomId}`) as PresenceChannel;
+                channel = pusher.subscribe(`presence-room-${roomId}`) as PresenceChannel;
 
-                // KROK 4: Ustaw wszystkie listenery
-                const isInitiator = session.user.role === 'ADMIN';
-                const createOffer = async () => { if (pc.signalingState === 'stable') { try { setConnectionStatus("Tworzenie oferty..."); const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true }); await pc.setLocalDescription(offer); sendSignal('offer', offer); } catch (e) { console.error("Błąd tworzenia oferty:", e); }}};
-                
-                pc.onicecandidate = e => e.candidate && sendSignal('ice-candidate', e.candidate);
-                pc.ontrack = e => { const s = e.streams[0]; if (s) { e.track.getSettings().displaySurface ? setRemoteScreenStream(s) : setRemoteCameraStream(s); if(e.track.getSettings().displaySurface) setPrimaryView('screen'); }};
-                pc.onconnectionstatechange = () => { if (pc) { setConnectionStatus(pc.connectionState); if (['disconnected', 'closed', 'failed'].includes(pc.connectionState)) handleHangUp(); }};
-                
-                channel.bind('webrtc-offer', async (data: any) => { if (!isInitiator) { await pc.setRemoteDescription(new RTCSessionDescription(data.offer)); const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); sendSignal('answer', answer); }});
-                channel.bind('webrtc-answer', async (data: any) => { if (isInitiator) { await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); }});
-                channel.bind('webrtc-ice-candidate', async (data: any) => { if (data.candidate && pc.signalingState !== 'closed') { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); }});
+                const handleOffer = async (data: any) => { if (session.user.role !== 'ADMIN') { try { await pc!.setRemoteDescription(new RTCSessionDescription(data.offer)); pendingCandidatesRef.current.forEach(c => pc!.addIceCandidate(c)); pendingCandidatesRef.current = []; const answer = await pc!.createAnswer(); await pc!.setLocalDescription(answer); sendSignal('answer', answer); } catch(e) {console.error("Błąd handleOffer:", e)} }};
+                const handleAnswer = async (data: any) => { if (session.user.role === 'ADMIN') { try { await pc!.setRemoteDescription(new RTCSessionDescription(data.answer)); pendingCandidatesRef.current.forEach(c => pc!.addIceCandidate(c)); pendingCandidatesRef.current = []; } catch(e) {console.error("Błąd handleAnswer:", e)} }};
+                const handleIceCandidate = async (data: any) => { if (data.candidate) { try { if (pc!.remoteDescription) { await pc!.addIceCandidate(new RTCIceCandidate(data.candidate)); } else { pendingCandidatesRef.current.push(new RTCIceCandidate(data.candidate)); } } catch(e) {console.error("Błąd handleIceCandidate:", e)} }};
+
+                channel.bind('webrtc-offer', handleOffer);
+                channel.bind('webrtc-answer', handleAnswer);
+                channel.bind('webrtc-ice-candidate', handleIceCandidate);
                 channel.bind('call-ended', handleHangUp);
-
-                // NOWA, UPROSZCZONA LOGIKA: Admin reaguje tylko na dołączenie studenta
-                if (isInitiator) {
-                    channel.bind('pusher:member_added', (member: { id: string }) => {
+                
+                // KROK 5: Logika inicjowania połączenia
+                if (session.user.role === 'ADMIN') {
+                    // Admin czeka, aż student dołączy, i wtedy wysyła ofertę
+                    channel.bind('pusher:member_added', async (member: {id: string}) => {
                         if (member.id !== session.user.id) {
-                            console.log("Peer dołączył, tworzę ofertę...");
-                            createOffer();
+                           if (pc!.signalingState === 'stable') {
+                                try {
+                                    const offer = await pc!.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+                                    await pc!.setLocalDescription(offer);
+                                    sendSignal('offer', offer);
+                                } catch (e) { console.error("Błąd tworzenia oferty:", e); }
+                            }
                         }
                     });
                 }
                 
-                // KROK 5: Poinformuj innych, że jesteś w pokoju
                 setConnectionStatus("Oczekiwanie na drugiego uczestnika...");
                 await fetch('/api/room/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId }) });
 
             } catch (error: any) {
-                console.error("❌ Błąd podczas inicjalizacji:", error);
                 setHasMediaError(true);
                 setConnectionStatus(handleMediaStreamError(error));
             }
         };
-        
+
         initialize();
 
         return () => {
-            isCleanupDone = true;
             if (pusherRef.current) pusherRef.current.disconnect();
             if (peerConnectionRef.current) peerConnectionRef.current.close();
             localStreamRef.current?.getTracks().forEach(t => t.stop());
@@ -183,8 +204,8 @@ export default function RoomPage() {
     const mainStream = primaryView === 'screen' ? remoteScreenStream : remoteCameraStream;
     const pipStream = primaryView === 'screen' ? remoteCameraStream : remoteScreenStream;
 
-    useEffect(() => { if (remoteVideoRef.current) remoteVideoRef.current.srcObject = mainStream; }, [mainStream]);
-    useEffect(() => { if (remoteVideoPiPRef.current) remoteVideoPiPRef.current.srcObject = pipStream; }, [pipStream]);
+    useEffect(() => { if (remoteVideoRef.current) { remoteVideoRef.current.srcObject = mainStream; } }, [mainStream]);
+    useEffect(() => { if (remoteVideoPiPRef.current) { remoteVideoPiPRef.current.srcObject = pipStream; } }, [pipStream]);
     
     if (sessionStatus === 'loading') return <div className="w-full h-screen bg-slate-900 flex items-center justify-center"><FiLoader className="animate-spin text-white" size={48}/></div>;
     if (!roomId) return <div className="w-full h-screen bg-slate-900 flex items-center justify-center">Brak ID pokoju.</div>;
