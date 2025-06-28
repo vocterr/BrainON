@@ -1,17 +1,12 @@
-// FILE: components/CallNotification.tsx
-
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { usePusher } from '@/lib/usePusher';
-import { useSession } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useRouter } from 'next/navigation';
 import { FiPhone, FiPhoneOff, FiPhoneIncoming } from 'react-icons/fi';
 
 export default function CallNotification() {
-    const { data: session, status: sessionStatus } = useSession();
-    const router = useRouter();
+    // We get everything we need from our central usePusher hook
     const { incomingCall, respondToCall } = usePusher();
     const ringtoneRef = useRef<HTMLAudioElement | null>(null);
 
@@ -31,10 +26,20 @@ export default function CallNotification() {
         }
     }, [incomingCall]);
 
-    // Guard clause: Only authenticated students should see notifications
-    if (sessionStatus !== 'authenticated' || !session?.user?.id || session.user.role === 'ADMIN') {
+    // If there is no incoming call, the component renders nothing
+    if (!incomingCall) {
         return null;
     }
+
+    // The functions to accept or reject the call now simply call the function
+    // from the usePusher hook, passing the entire incomingCall object.
+    const handleAccept = () => {
+        respondToCall('accept', incomingCall);
+    };
+
+    const handleReject = () => {
+        respondToCall('reject', incomingCall);
+    };
 
     return (
         <AnimatePresence>
@@ -63,7 +68,7 @@ export default function CallNotification() {
                              <motion.button
                                  whileHover={{ scale: 1.05 }}
                                  whileTap={{ scale: 0.95 }}
-                                 onClick={() => respondToCall('accept', incomingCall.roomId, incomingCall.adminId)}
+                                 onClick={handleAccept}
                                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl"
                              >
                                  <FiPhone className="w-5 h-5" />
@@ -72,7 +77,7 @@ export default function CallNotification() {
                              <motion.button
                                  whileHover={{ scale: 1.05 }}
                                  whileTap={{ scale: 0.95 }}
-                                 onClick={() => respondToCall('reject', incomingCall.roomId, incomingCall.adminId)}
+                                 onClick={handleReject}
                                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl"
                              >
                                  <FiPhoneOff className="w-5 h-5" />

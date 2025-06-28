@@ -20,33 +20,35 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const socketId = formData.get('socket_id') as string;
   const channelName = formData.get('channel_name') as string;
-
-  // Security: Users can only subscribe to their own channels
   const userId = session.user.id;
-  
-  // Allow presence channel for online status
-  if (channelName === `presence-online`) {
-    const authResponse = pusher.authorizeChannel(socketId, channelName, {
-      user_id: userId,
-      user_info: {
-        name: session.user.name || 'User',
-        role: session.user.role || 'student'
-      }
-    });
+
+  const userData = {
+    user_id: userId,
+    user_info: {
+      name: session.user.name || 'User',
+      role: session.user.role || 'student'
+    }
+  };
+
+  // Zezwól na kanał obecności online
+  if (channelName === 'presence-online') {
+    const authResponse = pusher.authorizeChannel(socketId, channelName, userData);
     return NextResponse.json(authResponse);
   }
   
-  // Allow users to subscribe to their own private channel
+  // Zezwól na prywatny kanał użytkownika
   if (channelName === `private-user-${userId}`) {
     const authResponse = pusher.authorizeChannel(socketId, channelName);
     return NextResponse.json(authResponse);
   }
 
-  // Allow users to subscribe to room channels they're part of
-  if (channelName.startsWith('private-room-')) {
-    // In a production app, you'd verify the user has access to this room
-    // For now, we'll allow authenticated users to join any room
-    const authResponse = pusher.authorizeChannel(socketId, channelName);
+  // ==================================================================
+  // NOWA LOGIKA: Zezwól na kanały obecności dla pokoi rozmów
+  // ==================================================================
+  if (channelName.startsWith('presence-room-')) {
+    // W prawdziwej aplikacji sprawdziłbyś, czy użytkownik ma dostęp do tego pokoju.
+    // Na razie pozwalamy każdemu zalogowanemu użytkownikowi.
+    const authResponse = pusher.authorizeChannel(socketId, channelName, userData);
     return NextResponse.json(authResponse);
   }
 

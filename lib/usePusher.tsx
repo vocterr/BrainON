@@ -1,5 +1,8 @@
+"use client";
+
 import { useEffect, useRef, useState, useCallback } from 'react';
-import Pusher from 'pusher-js';
+// KROK 1: Usuwamy błędny import 'Member' i zostawiamy poprawne
+import Pusher, { PresenceChannel, Members } from 'pusher-js';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 
@@ -11,135 +14,95 @@ interface IncomingCall {
 
 interface CallStatus {
   studentId: string;
-  status: 'ringing' | 'accepted' | 'rejected' | 'offline';
+  status: 'calling' | 'ringing' | 'accepted' | 'rejected' | 'offline' | 'disconnected' | null;
+}
+
+// KROK 2: Definiujemy prosty, poprawny typ dla członka kanału
+interface PusherMember {
+    id: string;
+    info: any; // 'info' może zawierać dodatkowe dane, ale my potrzebujemy tylko 'id'
 }
 
 export function usePusher() {
   const { data: session } = useSession();
   const router = useRouter();
   const pusherRef = useRef<Pusher | null>(null);
+  
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [callStatus, setCallStatus] = useState<CallStatus | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id || pusherRef.current) return;
 
-    // Enable Pusher logging in development
     if (process.env.NODE_ENV === 'development') {
       Pusher.logToConsole = true;
     }
 
-    // Initialize Pusher
-    const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
+    const pusherInstance = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
-      authEndpoint: '/api/pusher/auth'
+      authEndpoint: '/api/pusher/auth',
+      auth: { params: { userId: session.user.id } }
     });
+    pusherRef.current = pusherInstance;
 
-    pusherRef.current = pusher;
+    const presenceChannel = pusherInstance.subscribe('presence-online') as PresenceChannel;
 
-    // Subscribe to user's private channel
-    const privateChannel = pusher.subscribe(`private-user-${session.user.id}`);
-    
-    // Subscribe to presence channel to track online users
-    const presenceChannel = pusher.subscribe('presence-online') as any;
-
-    // Handle presence events
-    presenceChannel.bind('pusher:subscription_succeeded', (members: any) => {
+    // KROK 3: Używamy poprawnych typów w callbackach
+    presenceChannel.bind('pusher:subscription_succeeded', (members: Members) => {
       const memberIds = Object.keys(members.members);
       setOnlineUsers(memberIds);
-      console.log('Online users:', memberIds);
     });
 
-    presenceChannel.bind('pusher:member_added', (member: any) => {
-      setOnlineUsers(prev => [...prev, member.id]);
-      console.log('User came online:', member.id);
+    presenceChannel.bind('pusher:member_added', (member: PusherMember) => {
+      setOnlineUsers(prev => [...new Set([...prev, member.id])]);
     });
 
-    presenceChannel.bind('pusher:member_removed', (member: any) => {
+    presenceChannel.bind('pusher:member_removed', (member: PusherMember) => {
       setOnlineUsers(prev => prev.filter(id => id !== member.id));
-      console.log('User went offline:', member.id);
+      // Dodatkowa logika do obsługi statusu, gdy ktoś się rozłączy
+      if (callStatus?.studentId === member.id) {
+        setCallStatus({ studentId: member.id, status: 'disconnected' });
+      }
     });
 
-    // Handle incoming calls (for students)
-    privateChannel.bind('incoming-call', (data: IncomingCall) => {
-      console.log('Incoming call:', data);
-      setIncomingCall(data);
-    });
-
-    // Handle call status updates (for admin)
-    privateChannel.bind('call-status', (data: CallStatus) => {
-      console.log('Call status:', data);
-      setCallStatus(data);
-    });
-
-    // Handle call accepted (for admin)
-    privateChannel.bind('call-accepted', (data: { roomId: string; studentId: string }) => {
-      console.log('Call accepted:', data);
+    const privateChannel = pusherInstance.subscribe(`private-user-${session.user.id}`);
+    privateChannel.bind('incoming-call', (data: IncomingCall) => setIncomingCall(data));
+    privateChannel.bind('call-status', (data: CallStatus) => setCallStatus(data));
+    privateChannel.bind('call-accepted', (data: { roomId: string, studentId: string }) => {
       setCallStatus({ studentId: data.studentId, status: 'accepted' });
-      // Redirect to video room
-      router.push(`/admin/video/${data.roomId}`);
+      router.push(`/rozmowa/${data.roomId}`);
     });
 
     return () => {
-      privateChannel.unbind_all();
-      privateChannel.unsubscribe();
-      presenceChannel.unbind_all();
-      presenceChannel.unsubscribe();
-      pusher.disconnect();
+      if (pusherRef.current) {
+        pusherRef.current.disconnect();
+        pusherRef.current = null;
+      }
     };
-  }, [session?.user?.id, router]);
+  }, [session?.user?.id, router, callStatus?.studentId]);
 
-  const initiateCall = useCallback(async (roomId: string, callerName: string) => {
-    try {
-      const response = await fetch('/api/call/initiate', {
+  const initiateCall = useCallback(async (roomId: string, studentId: string, callerName: string) => {
+    await fetch('/api/call/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId, callerName })
-      });
-      
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      
-      return data;
-    } catch (error) {
-      console.error('Error initiating call:', error);
-      throw error;
-    }
+        body: JSON.stringify({ roomId, studentId, callerName })
+    });
   }, []);
 
-  const respondToCall = useCallback(async (action: 'accept' | 'reject', roomId: string, adminId: string) => {
-    try {
-      const response = await fetch('/api/call/respond', {
+  const respondToCall = useCallback((action: 'accept' | 'reject', call: IncomingCall) => {
+    setIncomingCall(null);
+    fetch('/api/call/respond', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, roomId, adminId })
-      });
-      
-      if (!response.ok) throw new Error('Failed to respond');
-      
-      setIncomingCall(null);
-      
-      if (action === 'accept') {
-        router.push(`/student/video/${roomId}`);
-      }
-    } catch (error) {
-      console.error('Error responding to call:', error);
-      throw error;
+        body: JSON.stringify({ action, ...call })
+    });
+    if (action === 'accept') {
+        router.push(`/rozmowa/${call.roomId}`);
     }
   }, [router]);
 
-  const isUserOnline = useCallback((userId: string) => {
-    return onlineUsers.includes(userId);
-  }, [onlineUsers]);
+  const isUserOnline = useCallback((userId: string) => onlineUsers.includes(userId), [onlineUsers]);
 
-  return {
-    incomingCall,
-    callStatus,
-    onlineUsers,
-    isUserOnline,
-    initiateCall,
-    respondToCall,
-    setCallStatus
-  };
+  return { pusher: pusherRef.current, onlineUsers, incomingCall, setIncomingCall, callStatus, setCallStatus, isUserOnline, initiateCall, respondToCall };
 }
