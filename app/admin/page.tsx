@@ -1,655 +1,240 @@
-// FILE: app/[role]/video/[roomId]/page.tsx
+// FILE: app/admin/page.tsx
 
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion } from "framer-motion";
 import { useSession } from 'next-auth/react';
-import Pusher from 'pusher-js';
-import { FiCameraOff, FiMic, FiMicOff, FiVideo, FiVideoOff, FiAlertTriangle, FiPhoneOff, FiXCircle, FiLoader, FiMonitor, FiAirplay } from 'react-icons/fi';
+import { useRouter } from 'next/navigation';
+import { usePusher } from '@/lib/usePusher';
+import { FiHome, FiLoader, FiMonitor, FiPhone, FiSlash, FiUser, FiWifiOff, FiAlertTriangle, FiPhoneOff } from 'react-icons/fi';
 
-// ICE Servers configuration
-const ICE_SERVERS = {
-    iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-    ],
+// --- TYPE DEFINITIONS ---
+interface Student { id: string; name: string | null; email: string | null; }
+type AppointmentStatus = 'UPCOMING' | 'COMPLETED' | 'CANCELLED';
+type AppointmentType = 'ONLINE' | 'TEACHER_HOME' | 'STUDENT_HOME';
+type Subject = 'MATEMATYKA' | 'INF02';
+interface AdminAppointment { id: string; student: Student; subject: Subject; date: string; type: AppointmentType; status: AppointmentStatus; }
+
+// --- CONSTANTS ---
+const typeDetails: Record<AppointmentType, { icon: React.ReactElement, text: string }> = { 
+    ONLINE: { icon: <FiMonitor />, text: "Online" }, 
+    TEACHER_HOME: { icon: <FiHome />, text: "U nauczyciela" }, 
+    STUDENT_HOME: { icon: <FiUser />, text: "U ucznia" }, 
 };
 
-// Helper functions
-const getMediaStreamWithFallback = async () => {
-    try {
-        return await navigator.mediaDevices.getUserMedia({ 
-            video: true, 
-            audio: true 
-        });
-    } catch (error: any) {
-        console.error('Error accessing media devices:', error);
-        // Try audio only if video fails
-        try {
-            return await navigator.mediaDevices.getUserMedia({ 
-                video: false, 
-                audio: true 
-            });
-        } catch (audioError) {
-            console.error('Error accessing audio:', audioError);
-            throw audioError;
-        }
-    }
-};
-
-// Sub-components
-const VideoPlaceholder = ({ text, isError = false }: { text: string, isError?: boolean }) => (
-    <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-3">
-        {isError ? <FiAlertTriangle className="text-red-500" size={32} /> : <FiLoader className="animate-spin" size={32} />}
-        <span className={`text-lg font-medium mt-2 text-center ${isError ? 'text-red-500' : ''}`}>{text}</span>
-    </div>
-);
-
-const ControlButton = ({ icon, offIcon, isToggled, onToggle, activeClass = 'bg-cyan-500/80', disabled = false, title = '' }: { 
-    icon: React.ReactElement; 
-    offIcon?: React.ReactElement; 
-    isToggled: boolean; 
-    onToggle: () => void; 
-    activeClass?: string;
-    disabled?: boolean;
-    title?: string;
-}) => (
-    <button 
-        onClick={onToggle} 
-        disabled={disabled}
-        title={title}
-        className={`p-4 rounded-full transition-colors ${
-            disabled 
-                ? 'bg-slate-800 text-slate-600 cursor-not-allowed' 
-                : (isToggled ? activeClass + ' text-white' : 'bg-slate-700/80 text-white hover:bg-slate-600')
-        }`}
-    >
-        {isToggled ? (offIcon || icon) : icon}
+// --- SUB-COMPONENTS ---
+const TabButton = ({ text, isActive, onClick, count }: { text: string, isActive: boolean, onClick: () => void, count: number }) => (
+    <button onClick={onClick} className={`relative px-4 py-2 rounded-md text-sm transition-colors ${isActive ? 'text-white' : 'text-slate-400 hover:text-white'}`} > 
+        {text} 
+        <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${isActive ? 'bg-purple-500 text-white' : 'bg-slate-700 text-slate-300'}`}> 
+            {count} 
+        </span> 
+        {isActive && <motion.div layoutId="active-admin-tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500" />} 
     </button>
 );
 
-export default function VideoRoomPage() {
-    const { data: session, status: sessionStatus } = useSession();
-    const router = useRouter();
-    const { roomId, role } = useParams() as { roomId: string; role: string };
-
-    // Refs for video elements
-    const localVideoRef = useRef<HTMLVideoElement>(null);
-    const remoteVideoRef = useRef<HTMLVideoElement>(null);
-    const remoteVideoPiPRef = useRef<HTMLVideoElement>(null);
-
-    // WebRTC refs
-    const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-    const localStreamRef = useRef<MediaStream | null>(null);
-    const localScreenStreamRef = useRef<MediaStream | null>(null);
-    const videoSenderRef = useRef<RTCRtpSender | null>(null);
-    const pendingCandidatesRef = useRef<RTCIceCandidate[]>([]);
+const CallButton = ({ status, isOnline, onClick }: { status: 'calling' | 'ringing' | 'offline' | 'rejected' | 'accepted' | 'disconnected' | null, isOnline: boolean, onClick: () => void }) => { 
+    const baseClasses = "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-all duration-300 w-32 justify-center"; 
     
-    // Pusher refs
-    const pusherRef = useRef<Pusher | null>(null);
-    const roomChannelRef = useRef<any>(null);
-    const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-    // State
-    const [isMuted, setIsMuted] = useState(false);
-    const [isCameraOff, setIsCameraOff] = useState(false);
-    const [isCallEnded, setIsCallEnded] = useState(false);
-    const [remoteCameraStream, setRemoteCameraStream] = useState<MediaStream | null>(null);
-    const [remoteScreenStream, setRemoteScreenStream] = useState<MediaStream | null>(null);
-    const [isSharingScreen, setIsSharingScreen] = useState(false);
-    const [primaryView, setPrimaryView] = useState<'camera' | 'screen'>('camera');
-    const [isScreenShareSupported, setIsScreenShareSupported] = useState(false);
-    const [connectionStatus, setConnectionStatus] = useState('Inicjowanie...');
-    const [hasMediaError, setHasMediaError] = useState(false);
-    const [isConnected, setIsConnected] = useState(false);
-    const [peerJoined, setPeerJoined] = useState(false);
-
-    // Check screen share support
-    useEffect(() => {
-        if (typeof navigator !== 'undefined' && navigator.mediaDevices && 'getDisplayMedia' in navigator.mediaDevices) {
-            setIsScreenShareSupported(true);
-        }
-    }, []);
-
-    // Validate role
-    useEffect(() => {
-        if (role !== 'admin' && role !== 'student') {
-            router.push('/');
-            return;
-        }
-        
-        if (session?.user?.role) {
-            const expectedRole = session.user.role === 'ADMIN' ? 'admin' : 'student';
-            if (role !== expectedRole) {
-                router.push('/');
-            }
-        }
-    }, [role, session, router]);
-
-    // Hang up handler
-    const handleHangUp = useCallback(async () => {
-        if (isCallEnded) return;
-        setIsCallEnded(true);
-        
-        // Clear any connection timeout
-        if (connectionTimeoutRef.current) {
-            clearTimeout(connectionTimeoutRef.current);
-        }
-        
-        // Notify other peer via Pusher
-        if (roomChannelRef.current) {
-            await fetch('/api/room/notify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ roomId, event: 'hang-up' })
-            });
-        }
-        
-        // Clean up streams
-        localStreamRef.current?.getTracks().forEach(track => track.stop());
-        localScreenStreamRef.current?.getTracks().forEach(track => track.stop());
-        peerConnectionRef.current?.close();
-        
-        // Disconnect Pusher
-        if (roomChannelRef.current) {
-            roomChannelRef.current.unbind_all();
-            roomChannelRef.current.unsubscribe();
-        }
-        if (pusherRef.current) {
-            pusherRef.current.disconnect();
-        }
-        
-        // Redirect after delay
-        setTimeout(() => {
-            const redirectUrl = role === 'admin' ? '/admin' : '/moje-terminy';
-            router.push(redirectUrl);
-        }, 2000);
-    }, [roomId, role, router, isCallEnded]);
-
-    // Media controls
-    const toggleMute = useCallback(() => {
-        if (localStreamRef.current) {
-            const audioTrack = localStreamRef.current.getAudioTracks()[0];
-            if (audioTrack) {
-                audioTrack.enabled = !audioTrack.enabled;
-                setIsMuted(!audioTrack.enabled);
-            }
-        }
-    }, []);
-
-    const toggleCamera = useCallback(() => {
-        if (localStreamRef.current) {
-            const videoTrack = localStreamRef.current.getVideoTracks()[0];
-            if (videoTrack) {
-                videoTrack.enabled = !videoTrack.enabled;
-                setIsCameraOff(!videoTrack.enabled);
-            }
-        }
-    }, []);
-
-    // Screen sharing
-    const stopScreenShare = useCallback(() => {
-        if (!videoSenderRef.current || !localStreamRef.current) return;
-        localScreenStreamRef.current?.getTracks().forEach(track => track.stop());
-        localScreenStreamRef.current = null;
-        const cameraTrack = localStreamRef.current.getVideoTracks()[0];
-        if (cameraTrack && videoSenderRef.current) {
-            videoSenderRef.current.replaceTrack(cameraTrack);
-        }
-        setIsSharingScreen(false);
-    }, []);
-
-    const handleToggleScreenShare = useCallback(async () => {
-        if (isSharingScreen) {
-            stopScreenShare();
-        } else {
-            if (!peerConnectionRef.current || !videoSenderRef.current) return;
-            try {
-                const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-                localScreenStreamRef.current = screenStream;
-                const screenTrack = screenStream.getVideoTracks()[0];
-                screenTrack.onended = () => stopScreenShare();
-                await videoSenderRef.current.replaceTrack(screenTrack);
-                setIsSharingScreen(true);
-            } catch (error) {
-                console.error("Error starting screen share:", error);
-                setIsSharingScreen(false);
-            }
-        }
-    }, [isSharingScreen, stopScreenShare]);
-
-    const handleSwapViews = () => {
-        if (remoteScreenStream) {
-            setPrimaryView(prev => prev === 'camera' ? 'screen' : 'camera');
-        }
-    };
-
-    // Send WebRTC signaling data via Pusher
-    const sendSignal = useCallback(async (type: string, data: any) => {
-        try {
-            console.log(`Sending ${type} signal`);
-            await fetch('/api/room/signal', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ roomId, type, data })
-            });
-        } catch (error) {
-            console.error(`Error sending ${type}:`, error);
-        }
-    }, [roomId]);
-
-    // Main WebRTC setup
-    useEffect(() => {
-        if (sessionStatus !== 'authenticated' || !roomId || !session?.user) return;
-
-        console.log('Setting up WebRTC connection...');
-        
-        const pc = new RTCPeerConnection(ICE_SERVERS);
-        peerConnectionRef.current = pc;
-        const isInitiator = session.user.role === 'ADMIN';
-
-        // Initialize Pusher
-        const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
-            cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
-            authEndpoint: '/api/pusher/auth'
-        });
-        pusherRef.current = pusher;
-
-        // Subscribe to room channel
-        const roomChannel = pusher.subscribe(`private-room-${roomId}`);
-        roomChannelRef.current = roomChannel;
-
-        // Connection state handlers
-        const updateConnectionState = () => {
-            if (!pc) return;
-            
-            const state = pc.connectionState;
-            const iceState = pc.iceConnectionState;
-            
-            console.log('Connection state:', state, 'ICE state:', iceState);
-            
-            if (state === 'connected' || iceState === 'connected' || iceState === 'completed') {
-                setConnectionStatus('Połączono');
-                setIsConnected(true);
-                // Clear connection timeout when connected
-                if (connectionTimeoutRef.current) {
-                    clearTimeout(connectionTimeoutRef.current);
-                }
-            } else if (state === 'connecting' || iceState === 'checking') {
-                setConnectionStatus('Łączenie...');
-            } else if (state === 'failed' || iceState === 'failed') {
-                setConnectionStatus('Połączenie nieudane');
-                setHasMediaError(true);
-            } else if (state === 'disconnected' || iceState === 'disconnected') {
-                setConnectionStatus('Rozłączono');
-                if (isConnected) {
-                    handleHangUp();
-                }
-            }
-        };
-
-        pc.onconnectionstatechange = updateConnectionState;
-        pc.oniceconnectionstatechange = updateConnectionState;
-
-        pc.onicecandidate = (event) => {
-            if (event.candidate) {
-                console.log('Sending ICE candidate');
-                sendSignal('ice-candidate', event.candidate);
-            }
-        };
-
-        pc.ontrack = (event) => {
-            console.log('Received remote track:', event.track.kind);
-            const stream = event.streams[0];
-            if (!stream) return;
-            
-            const isScreen = event.track.id.includes('screen') || 
-                           (event.track.getSettings && event.track.getSettings().displaySurface);
-            
-            if (isScreen) {
-                setRemoteScreenStream(stream);
-                setPrimaryView('screen');
-            } else {
-                setRemoteCameraStream(stream);
-                // When we receive the first video track, we're connected
-                if (!isConnected) {
-                    setIsConnected(true);
-                    setConnectionStatus('Połączono');
-                }
-            }
-        };
-
-        // Pusher event handlers
-        const handlePeerJoined = async ({ userId }: { userId: string }) => {
-            console.log('Peer joined:', userId);
-            setPeerJoined(true);
-            
-            if (isInitiator) {
-                // Create and send offer
-                try {
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    sendSignal('offer', offer);
-                } catch (error) {
-                    console.error('Error creating offer:', error);
-                }
-            }
-        };
-
-        const handleOffer = async ({ offer }: { offer: RTCSessionDescriptionInit }) => {
-            console.log('Received offer');
-            if (!isInitiator) {
-                try {
-                    await pc.setRemoteDescription(new RTCSessionDescription(offer));
-                    
-                    // Process any pending ICE candidates
-                    pendingCandidatesRef.current.forEach(candidate => {
-                        pc.addIceCandidate(candidate).catch(console.error);
-                    });
-                    pendingCandidatesRef.current = [];
-                    
-                    // Create and send answer
-                    const answer = await pc.createAnswer();
-                    await pc.setLocalDescription(answer);
-                    sendSignal('answer', answer);
-                } catch (error) {
-                    console.error('Error handling offer:', error);
-                }
-            }
-        };
-
-        const handleAnswer = async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
-            console.log('Received answer');
-            if (isInitiator) {
-                try {
-                    await pc.setRemoteDescription(new RTCSessionDescription(answer));
-                    
-                    // Process any pending ICE candidates
-                    pendingCandidatesRef.current.forEach(candidate => {
-                        pc.addIceCandidate(candidate).catch(console.error);
-                    });
-                    pendingCandidatesRef.current = [];
-                } catch (error) {
-                    console.error('Error handling answer:', error);
-                }
-            }
-        };
-
-        const handleIceCandidate = async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
-            console.log('Received ICE candidate');
-            try {
-                if (pc.remoteDescription) {
-                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                } else {
-                    // Queue candidates if remote description not set yet
-                    pendingCandidatesRef.current.push(new RTCIceCandidate(candidate));
-                }
-            } catch (error) {
-                console.error('Error adding ICE candidate:', error);
-            }
-        };
-
-        const handleCallEnded = () => {
-            console.log('Call ended by peer');
-            handleHangUp();
-        };
-
-        // Bind Pusher events
-        roomChannel.bind('peer-joined', handlePeerJoined);
-        roomChannel.bind('webrtc-offer', handleOffer);
-        roomChannel.bind('webrtc-answer', handleAnswer);
-        roomChannel.bind('webrtc-ice-candidate', handleIceCandidate);
-        roomChannel.bind('call-ended', handleCallEnded);
-
-        // Initialize call
-        const initializeCall = async () => {
-            try {
-                // Get user media
-                const stream = await getMediaStreamWithFallback();
-                localStreamRef.current = stream;
-                if (localVideoRef.current) {
-                    localVideoRef.current.srcObject = stream;
-                }
-                
-                // Add tracks to peer connection
-                stream.getTracks().forEach(track => {
-                    const sender = pc.addTrack(track, stream);
-                    if (track.kind === 'video') {
-                        videoSenderRef.current = sender;
-                    }
-                });
-                
-                // Notify that we joined
-                await fetch('/api/room/join', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ roomId })
-                });
-                
-                // Set connection timeout (30 seconds)
-                connectionTimeoutRef.current = setTimeout(() => {
-                    if (!isConnected && !isCallEnded) {
-                        console.error('Connection timeout');
-                        setConnectionStatus('Przekroczono limit czasu');
-                        setHasMediaError(true);
-                        setTimeout(() => handleHangUp(), 3000);
-                    }
-                }, 30000);
-                
-            } catch (error: any) {
-                console.error('Error initializing call:', error);
-                setConnectionStatus('Błąd dostępu do kamery/mikrofonu');
-                setHasMediaError(true);
-            }
-        };
-
-        initializeCall();
-
-        // Cleanup
-        return () => {
-            console.log('Cleaning up WebRTC connection');
-            
-            if (connectionTimeoutRef.current) {
-                clearTimeout(connectionTimeoutRef.current);
-            }
-            
-            // Unbind all events
-            roomChannel.unbind('peer-joined', handlePeerJoined);
-            roomChannel.unbind('webrtc-offer', handleOffer);
-            roomChannel.unbind('webrtc-answer', handleAnswer);
-            roomChannel.unbind('webrtc-ice-candidate', handleIceCandidate);
-            roomChannel.unbind('call-ended', handleCallEnded);
-            
-            // Unsubscribe and disconnect
-            roomChannel.unsubscribe();
-            pusher.disconnect();
-            
-            // Close peer connection
-            if (pc) {
-                pc.onicecandidate = null;
-                pc.ontrack = null;
-                pc.onconnectionstatechange = null;
-                pc.oniceconnectionstatechange = null;
-                pc.close();
-            }
-            
-            // Stop media tracks
-            if (localStreamRef.current) {
-                localStreamRef.current.getTracks().forEach(track => track.stop());
-            }
-            if (localScreenStreamRef.current) {
-                localScreenStreamRef.current.getTracks().forEach(track => track.stop());
-            }
-        };
-    }, [roomId, sessionStatus, session, sendSignal, handleHangUp, isConnected, isCallEnded, role]);
-
-    // Update video elements when streams change
-    const mainStream = primaryView === 'screen' ? remoteScreenStream : remoteCameraStream;
-    const pipStream = primaryView === 'screen' ? remoteCameraStream : remoteScreenStream;
-
-    useEffect(() => {
-        if (remoteVideoRef.current) {
-            remoteVideoRef.current.srcObject = mainStream;
-        }
-    }, [mainStream]);
-    
-    useEffect(() => {
-        if (remoteVideoPiPRef.current) {
-            remoteVideoPiPRef.current.srcObject = pipStream;
-        }
-    }, [pipStream]);
-    
-    // Loading state
-    if (sessionStatus === 'loading') {
+    // Show offline state if user is not online, regardless of other status
+    if (!isOnline) {
         return (
-            <div className="w-full h-screen bg-slate-900 flex items-center justify-center">
-                <FiLoader className="animate-spin text-white" size={48}/>
+            <div className={`${baseClasses} bg-red-500/20 text-red-400`}> 
+                <FiWifiOff /> 
+                <span>Offline</span> 
             </div>
         );
     }
     
+    switch (status) { 
+        case 'calling': return (<div className={`${baseClasses} bg-yellow-500/20 text-yellow-300`}> <FiLoader className="animate-spin" /> <span>Łączenie...</span> </div>); 
+        case 'ringing': return (<div className={`${baseClasses} bg-cyan-500/20 text-cyan-300`}> <FiPhone className="animate-pulse" /> <span>Dzwonię...</span> </div>); 
+        case 'accepted': return (<div className={`${baseClasses} bg-green-500/20 text-green-300`}> <FiPhone className="animate-pulse" /> <span>Zaakceptowano</span> </div>);
+        case 'rejected': return (<div className={`${baseClasses} bg-red-500/20 text-red-400`}> <FiPhoneOff /> <span>Odrzucono</span> </div>); 
+        case 'disconnected': return (<div className={`${baseClasses} bg-orange-500/20 text-orange-400`}> <FiWifiOff /> <span>Rozłączono</span> </div>); 
+        default: return (<motion.button onClick={onClick} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className={`${baseClasses} bg-green-500/20 text-green-300 hover:bg-green-500/30`} > <FiPhone /> <span>Zadzwoń</span> </motion.button>); 
+    } 
+};
+
+// --- MAIN COMPONENT ---
+export default function AdminPage() {
+    const { data: session, status: sessionStatus } = useSession();
+    const router = useRouter();
+    const { callStatus, isUserOnline, initiateCall, setCallStatus } = usePusher();
+
+    const [activeTab, setActiveTab] = useState<'upcoming' | 'completed'>('upcoming');
+    const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
+    const [callStatuses, setCallStatuses] = useState<Record<string, 'calling' | 'ringing' | 'offline' | 'rejected' | 'accepted' | 'disconnected' | null>>({});
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
+
+    // Fetch appointments on load
+    useEffect(() => {
+        const fetchAppointments = async () => {
+            if (sessionStatus !== 'authenticated') return;
+            setIsLoading(true);
+            try {
+                const res = await fetch('/api/admin');
+                if (!res.ok) throw new Error('Nie udało się pobrać terminów.');
+                const data = await res.json();
+                setAppointments(data);
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchAppointments();
+    }, [sessionStatus]);
+
+    // Update call status when Pusher sends updates
+    useEffect(() => {
+        if (callStatus) {
+            setCallStatuses(prev => ({ ...prev, [callStatus.studentId]: callStatus.status }));
+            
+            // Clear status after 4 seconds for rejected/offline
+            if (callStatus.status === 'offline' || callStatus.status === 'rejected') {
+                setTimeout(() => {
+                    setCallStatuses(prev => ({ ...prev, [callStatus.studentId]: null }));
+                    setCallStatus(null);
+                }, 4000);
+            }
+            
+            // Clear accepted status immediately (since we're navigating away)
+            if (callStatus.status === 'accepted') {
+                setCallStatus(null);
+            }
+        }
+    }, [callStatus, setCallStatus]);
+
+    // Handle initiating a call
+    const handleInitiateCall = async (student: Student) => {
+        // Check if student is online first
+        if (!isUserOnline(student.id)) {
+            setCallStatuses(prev => ({ ...prev, [student.id]: 'offline' }));
+            setTimeout(() => {
+                setCallStatuses(prev => ({ ...prev, [student.id]: null }));
+            }, 4000);
+            return;
+        }
+
+        setCallStatuses(prev => ({ ...prev, [student.id]: 'calling' }));
+        
+        try {
+            // Create call room first
+            const res = await fetch('/api/calls', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ studentId: student.id }),
+            });
+            
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.error || 'Nie udało się stworzyć pokoju.');
+            }
+            
+            const newRoom = await res.json();
+            console.log(`[AdminPage] Created room ${newRoom.id}. Initiating call.`);
+            
+            // Use Pusher to notify the student
+            await initiateCall(newRoom.id, session?.user?.name || 'Admin');
+            
+        } catch (error: any) {
+            console.error("[AdminPage] Call initiation error:", error);
+            alert(`Błąd podczas inicjowania rozmowy: ${error.message}`);
+            setCallStatuses(prev => ({ ...prev, [student.id]: null }));
+        }
+    };
+
+    // Filter and sort appointments
+    const { upcomingAppointments, completedAppointments } = useMemo(() => {
+        const upcoming = appointments.filter(app => app.status === 'UPCOMING');
+        const completed = appointments.filter(app => app.status !== 'UPCOMING');
+        return {
+            upcomingAppointments: upcoming.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+            completedAppointments: completed.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        };
+    }, [appointments]);
+
+    const displayedAppointments = activeTab === 'upcoming' ? upcomingAppointments : completedAppointments;
+
+    if (sessionStatus === "loading") {
+        return <div className="flex items-center justify-center min-h-screen bg-slate-900"><FiLoader className="animate-spin text-white h-10 w-10" /></div>
+    }
+    if (sessionStatus !== "authenticated" || session?.user?.role !== 'ADMIN') {
+        return <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white"><FiSlash className="h-24 w-24 text-red-500 mb-4" /><h1>Brak dostępu</h1></div>
+    }
+
     return (
-        <div className="relative w-full h-screen bg-slate-900 text-white flex flex-col items-center justify-center overflow-hidden">
-            {/* Connection status */}
-            <AnimatePresence>
-                {!isConnected && !isCallEnded && (
-                    <motion.div 
-                        initial={{opacity:0}} 
-                        animate={{opacity:1}} 
-                        exit={{opacity:0}} 
-                        className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-800/80 backdrop-blur-sm rounded-lg px-4 py-2 flex items-center gap-3"
-                    >
-                        {!hasMediaError && <FiLoader className="animate-spin text-cyan-400"/>}
-                        <span className={`text-slate-300 ${hasMediaError ? 'text-red-400' : ''}`}>
-                            {connectionStatus}
-                        </span>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+        <div className="w-full min-h-screen bg-slate-900 text-white font-sans">
+            <main className="max-w-7xl mx-auto px-4 py-16 sm:py-24">
+                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+                    <h1 className="text-5xl sm:text-6xl">Panel Administratora</h1>
+                    <p className="mt-2 text-lg text-slate-400">Zarządzaj rezerwacjami i spotkaniami.</p>
+                </motion.div>
 
-            {/* Remote video (main view) */}
-            <div 
-                onClick={handleSwapViews} 
-                className={`w-full h-full flex items-center justify-center bg-black ${remoteScreenStream ? 'cursor-pointer' : ''}`}
-            >
-                <video 
-                    ref={remoteVideoRef} 
-                    autoPlay 
-                    playsInline 
-                    className="w-full h-full object-contain" 
-                />
-                {!mainStream && !isCallEnded && !isConnected && (
-                    <VideoPlaceholder text={connectionStatus} isError={hasMediaError} />
-                )}
-            </div>
-
-            {/* Picture-in-Picture for screen share */}
-            <AnimatePresence>
-                {pipStream && (
-                    <motion.div 
-                        onClick={handleSwapViews}
-                        initial={{ opacity: 0, y: 50 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 50 }}
-                        drag
-                        dragConstraints={{ 
-                            left: 0, 
-                            right: window.innerWidth - 256, 
-                            top: 0, 
-                            bottom: window.innerHeight - 144 
-                        }}
-                        className="absolute bottom-28 right-5 w-64 h-40 cursor-pointer z-20"
-                    >
-                        <video 
-                            ref={remoteVideoPiPRef} 
-                            autoPlay 
-                            playsInline 
-                            muted 
-                            className="w-full h-full object-cover rounded-xl shadow-2xl border-2 border-white/20" 
-                        />
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* Local video */}
-            <motion.div 
-                drag 
-                dragConstraints={{ 
-                    top: 20, 
-                    left: 20, 
-                    right: window.innerWidth - 270, 
-                    bottom: window.innerHeight - 200 
-                }} 
-                className="absolute top-5 left-5 w-64 h-40 cursor-grab active:cursor-grabbing z-30"
-            >
-                <div className="w-full h-full object-cover rounded-xl shadow-2xl border-2 border-white/20 bg-black flex items-center justify-center">
-                    <video 
-                        ref={localVideoRef} 
-                        autoPlay 
-                        playsInline 
-                        muted 
-                        className={`w-full h-full object-cover rounded-xl ${hasMediaError ? 'hidden' : 'block'}`} 
-                    />
-                    {hasMediaError && <FiCameraOff size={32} className="text-slate-500"/>}
-                </div>
-                {isCameraOff && !hasMediaError && (
-                    <div className="absolute inset-0 bg-slate-800/70 rounded-xl flex items-center justify-center">
-                        <FiCameraOff size={32} />
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.2 }} className="mt-12 bg-slate-800/50 border border-slate-700 rounded-2xl">
+                    <div className="p-4 border-b border-slate-700 flex items-center gap-2">
+                        <TabButton text="Nadchodzące" isActive={activeTab === 'upcoming'} onClick={() => setActiveTab('upcoming')} count={upcomingAppointments.length} />
+                        <TabButton text="Zakończone" isActive={activeTab === 'completed'} onClick={() => setActiveTab('completed')} count={completedAppointments.length} />
                     </div>
-                )}
-            </motion.div>
-
-            {/* Control bar */}
-            <motion.div 
-                initial={{y: 100}} 
-                animate={{y: 0}} 
-                className="absolute bottom-5 p-3 bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-full flex items-center gap-4 z-40"
-            >
-                <ControlButton 
-                    icon={<FiMic size={24}/>} 
-                    offIcon={<FiMicOff size={24}/>} 
-                    isToggled={isMuted} 
-                    onToggle={toggleMute} 
-                />
-                <ControlButton 
-                    icon={<FiVideo size={24}/>} 
-                    offIcon={<FiVideoOff size={24}/>} 
-                    isToggled={isCameraOff} 
-                    onToggle={toggleCamera} 
-                />
-                <ControlButton 
-                    icon={<FiMonitor size={24}/>} 
-                    offIcon={<FiAirplay size={24}/>} 
-                    isToggled={isSharingScreen} 
-                    onToggle={handleToggleScreenShare} 
-                    activeClass="bg-blue-500/80"
-                    disabled={!isScreenShareSupported}
-                    title={isScreenShareSupported ? "Share Screen" : "Screen sharing not supported"}
-                />
-                <div className="w-px h-8 bg-slate-600" />
-                <button 
-                    onClick={handleHangUp} 
-                    className="p-4 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors"
-                >
-                    <FiPhoneOff size={24} />
-                </button>
-            </motion.div>
-
-            {/* Call ended overlay */}
-            <AnimatePresence>
-                {isCallEnded && (
-                    <motion.div 
-                        initial={{opacity: 0}} 
-                        animate={{opacity: 1}} 
-                        className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center z-50"
-                    >
-                        <FiXCircle className="w-24 h-24 text-red-500 mb-4" />
-                        <h2 className="text-4xl font-bold">Rozmowa zakończona</h2>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                    <div className="overflow-x-auto">
+                        {isLoading ? (
+                            <div className="p-8 text-center"><FiLoader className="animate-spin h-8 w-8 mx-auto text-slate-500" /></div>
+                        ) : error ? (
+                            <div className="p-8 text-center text-red-400 flex flex-col items-center gap-2"><FiAlertTriangle /><span>{error}</span></div>
+                        ) : (
+                            <table className="w-full text-left">
+                                <thead className="border-b border-slate-700 text-sm text-slate-400">
+                                    <tr>
+                                        <th className="p-4">Uczeń</th>
+                                        <th className="p-4">Przedmiot</th>
+                                        <th className="p-4">Data i Godzina</th>
+                                        <th className="p-4">Forma</th>
+                                        <th className="p-4">Akcje</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {displayedAppointments.length > 0 ? displayedAppointments.map((app: AdminAppointment) => (
+                                        <tr key={app.id} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
+                                            <td className="p-4">
+                                                <div>{app.student.name}</div>
+                                                <div className="text-xs text-slate-400">{app.student.email}</div>
+                                            </td>
+                                            <td className="p-4">{app.subject}</td>
+                                            <td className="p-4">
+                                                {new Date(app.date).toLocaleString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="flex items-center gap-2 text-sm">
+                                                    {typeDetails[app.type].icon}
+                                                    <span>{typeDetails[app.type].text}</span>
+                                                </div>
+                                            </td>
+                                            <td className="p-4">
+                                                {activeTab === 'upcoming' && app.type === 'ONLINE' && (
+                                                    <CallButton
+                                                        status={callStatuses[app.student.id]}
+                                                        isOnline={isUserOnline(app.student.id)}
+                                                        onClick={() => handleInitiateCall(app.student)}
+                                                    />
+                                                )}
+                                            </td>
+                                        </tr>
+                                    )) : (
+                                        <tr>
+                                            <td colSpan={5} className="p-8 text-center text-slate-500">
+                                                Brak terminów w tej kategorii.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                </motion.div>
+            </main>
         </div>
     );
 }
