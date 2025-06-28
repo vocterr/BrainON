@@ -35,8 +35,6 @@ export async function POST(request: Request) {
     // ==================================================================
     const { studentId, appointmentDateTime, subject, type, price, notes } = metadata;
     const adminId = process.env.ADMINID as string;
-
-    console.log(adminId);
     
     // Walidacja danych z metadanych
     if (!studentId || !appointmentDateTime || !subject || !type || !price || !adminId) {
