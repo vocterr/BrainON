@@ -276,19 +276,14 @@ export default function RoomPage() {
                 // KROK 2: Stwórz połączenie WebRTC
                 setConnectionStatus("Tworzenie połączeniaa...");
                 const pc = new RTCPeerConnection({
-                    ...iceConfig, // <-- Używamy pobranej konfiguracji
+                    ...iceConfig,
                     iceCandidatePoolSize: 30,
+                    iceTransportPolicy: 'all',      // <-- dodane
+                    bundlePolicy: 'max-bundle',     // <-- dodane
+                    rtcpMuxPolicy: 'require',       // <-- dodane
                 });
                 peerConnectionRef.current = pc;
 
-                if ('restartIce' in pc) {
-                    (pc as any).configuration = {
-                        ...iceConfig, // <-- Używamy pobranej konfiguracji również tutaj
-                        iceTransportPolicy: 'all',
-                        bundlePolicy: 'max-bundle',
-                        rtcpMuxPolicy: 'require',
-                    };
-                }
 
                 stream.getTracks().forEach(track => {
                     if (track.kind === 'video') {
@@ -338,7 +333,7 @@ export default function RoomPage() {
                         sendSignal('ice-candidate', e.candidate);
                     }
                 };
-                
+
                 pc.ontrack = e => {
                     const s = e.streams[0];
                     if (s) {
@@ -414,7 +409,7 @@ export default function RoomPage() {
                         }
                     }
                 };
-                
+
                 channel.bind('webrtc-offer', async (data: any) => {
                     if (!isInitiator && pc.signalingState === 'stable') {
                         console.log('Received offer');
@@ -440,7 +435,7 @@ export default function RoomPage() {
                 });
 
                 channel.bind('call-ended', handleHangUp);
-                
+
                 channel.bind('pusher:subscription_succeeded', (members: any) => {
                     console.log('Successfully subscribed to channel');
                     const memberCount = Object.keys(members.members).length;
@@ -495,7 +490,7 @@ export default function RoomPage() {
                 };
 
                 document.addEventListener('visibilitychange', handleVisibilityChange);
-                
+
                 const dataChannel = pc.createDataChannel('keepAlive', { ordered: true });
                 dataChannel.onopen = () => console.log('Data channel opened for keep-alive');
 
