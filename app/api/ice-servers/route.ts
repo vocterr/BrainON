@@ -17,30 +17,28 @@ export async function GET() {
     }
 
     const iceServers = [
-      {
-        urls: "stun:stun.relay.metered.ca:80",
-      },
-      {
-        urls: "turn:global.relay.metered.ca:80",
-        username,
-        credential
-      },
-      {
-        urls: "turn:global.relay.metered.ca:80?transport=tcp",
-        username,
-        credential
-      },
-      {
-        urls: "turn:global.relay.metered.ca:443",
-        username,
-        credential
-      },
-      {
-        urls: "turns:global.relay.metered.ca:443?transport=tcp",
-        username,
-        credential
-      },
-  ]
+        // Publiczne serwery STUN
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: "stun:openrelay.metered.ca:80" },
+
+        // Publiczne serwery TURN z Open Relay Project
+        {
+            urls: "turn:openrelay.metered.ca:80",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+        },
+        {
+            urls: "turn:openrelay.metered.ca:443",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+        },
+        {
+            urls: "turn:openrelay.metered.ca:443?transport=tcp",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+        }
+    ]
 
     return NextResponse.json({ iceServers });
 }
