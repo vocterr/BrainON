@@ -10,7 +10,8 @@ import {
     FiAlertTriangle, FiPhoneOff, FiXCircle, FiLoader,
     FiMonitor, FiAirplay
 } from 'react-icons/fi';
-import { ICE_SERVERS, getMediaStreamWithFallback, handleMediaStreamError } from '@/lib/webrtc-utils';
+// ZMIANA 1: Importujemy 'getICEServers' i usuwamy 'ICE_SERVERS'
+import { getICEServers, getMediaStreamWithFallback, handleMediaStreamError } from '@/lib/webrtc-utils';
 
 const useIsMobile = (breakpoint = 768) => {
     const [isMobile, setIsMobile] = useState(false);
@@ -88,11 +89,10 @@ export default function RoomPage() {
         let oscillator: OscillatorNode | null = null;
 
         try {
-            // Create silent audio to prevent tab throttling
             audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
             oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
-            gainNode.gain.value = 0; // Silent
+            gainNode.gain.value = 0;
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
             oscillator.start();
@@ -132,10 +132,8 @@ export default function RoomPage() {
     const handleHangUp = useCallback(async () => {
         if (isCallEnded) return;
 
-        // Mark this as an intentional disconnect
         isIntentionalDisconnectRef.current = true;
 
-        // Clear any pending reconnect timeout
         if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
             reconnectTimeoutRef.current = null;
@@ -204,11 +202,8 @@ export default function RoomPage() {
         }
     }, [isSharingScreen, stopScreenShare]);
 
-    // Prevent browser throttling
     useEffect(() => {
-        // Request wake lock if available (for mobile devices)
         let wakeLock: any = null;
-
         const requestWakeLock = async () => {
             try {
                 if ('wakeLock' in navigator) {
@@ -219,18 +214,13 @@ export default function RoomPage() {
                 console.log('Wake lock request failed:', err);
             }
         };
-
         requestWakeLock();
-
-        // Re-acquire wake lock when page becomes visible
         const handleVisibilityChange = () => {
             if (!document.hidden && wakeLock && wakeLock.released) {
                 requestWakeLock();
             }
         };
-
         document.addEventListener('visibilitychange', handleVisibilityChange);
-
         return () => {
             if (wakeLock) {
                 wakeLock.release();
@@ -239,7 +229,6 @@ export default function RoomPage() {
         };
     }, []);
 
-    // Hide swap hint after 5 seconds or after first swap
     useEffect(() => {
         if (remoteCameraStream && remoteScreenStream && showSwapHint) {
             const timer = setTimeout(() => setShowSwapHint(false), 5000);
@@ -248,7 +237,6 @@ export default function RoomPage() {
     }, [remoteCameraStream, remoteScreenStream, showSwapHint]);
 
     const handleSwapViews = () => {
-        // Only allow swapping if we have both streams
         if (remoteScreenStream && remoteCameraStream) {
             setPrimaryView(prev => prev === 'camera' ? 'screen' : 'camera');
             setShowSwapHint(false);
@@ -274,18 +262,28 @@ export default function RoomPage() {
                 if (localVideoRef.current) localVideoRef.current.srcObject = stream;
                 setHasMediaError(false);
 
-                // KROK 2: Stwórz połączenie WebRTC with aggressive settings
+                // ==========================================================
+                // ZMIANA 2: Pobieramy konfigurację ICE z API PRZED stworzeniem połączenia
+                // ==========================================================
+                console.log("Fetching ICE servers from API...");
+                setConnectionStatus("Pobieranie konfiguracji połączenia...");
+                const iceConfig = await getICEServers();
+                console.log("Successfully fetched ICE servers:", iceConfig);
+                if (!iceConfig || iceConfig.iceServers.length <= 2) {
+                    console.warn("Using fallback STUN servers. TURN servers might be missing.");
+                }
+
+                // KROK 2: Stwórz połączenie WebRTC
+                setConnectionStatus("Tworzenie połączenia...");
                 const pc = new RTCPeerConnection({
-                    ...ICE_SERVERS,
-                    iceCandidatePoolSize: 30, // Pre-gather more candidates
+                    ...iceConfig, // <-- Używamy pobranej konfiguracji
+                    iceCandidatePoolSize: 30,
                 });
                 peerConnectionRef.current = pc;
 
-                // Set aggressive reconnection policy
                 if ('restartIce' in pc) {
-                    // Modern browsers support configuration
                     (pc as any).configuration = {
-                        ...ICE_SERVERS,
+                        ...iceConfig, // <-- Używamy pobranej konfiguracji również tutaj
                         iceTransportPolicy: 'all',
                         bundlePolicy: 'max-bundle',
                         rtcpMuxPolicy: 'require',
@@ -308,7 +306,6 @@ export default function RoomPage() {
                 });
                 pusherRef.current = pusher;
 
-                // Store socket ID when connection is established
                 pusher.connection.bind('connected', () => {
                     socketIdRef.current = pusher.connection.socket_id;
                     console.log('Pusher connected with socket ID:', socketIdRef.current);
@@ -341,35 +338,24 @@ export default function RoomPage() {
                         sendSignal('ice-candidate', e.candidate);
                     }
                 };
-
+                
                 pc.ontrack = e => {
                     const s = e.streams[0];
                     if (s) {
                         const trackSettings = e.track.getSettings();
                         console.log('Received track:', e.track.kind, trackSettings);
 
-                        // Check if this is a screen share track
-                        if (trackSettings.displaySurface ||
-                            (e.track.label && e.track.label.includes('screen'))) {
+                        if (trackSettings.displaySurface || (e.track.label && e.track.label.includes('screen'))) {
                             console.log('Setting remote screen stream');
                             setRemoteScreenStream(s);
-
-                            // Handle when screen share ends
                             e.track.onended = () => {
                                 console.log('Remote screen share ended');
                                 setRemoteScreenStream(null);
                             };
-
-                            // Auto-switch to screen view when screen sharing starts
-                            setPrimaryView(current => {
-                                // Only switch if we're currently viewing camera
-                                return current === 'camera' ? 'screen' : current;
-                            });
+                            setPrimaryView(current => current === 'camera' ? 'screen' : current);
                         } else if (e.track.kind === 'video') {
                             console.log('Setting remote camera stream');
                             setRemoteCameraStream(s);
-
-                            // Handle when camera ends
                             e.track.onended = () => {
                                 console.log('Remote camera ended');
                                 setRemoteCameraStream(null);
@@ -378,27 +364,20 @@ export default function RoomPage() {
                     }
                 };
 
-                // Track if we're reconnecting
                 pc.onconnectionstatechange = () => {
                     if (pc && !isIntentionalDisconnectRef.current) {
                         console.log('Connection state:', pc.connectionState);
                         setConnectionStatus(pc.connectionState);
 
-                        // Handle disconnection with grace period
                         if (pc.connectionState === 'disconnected') {
-                            // Clear any existing timeout
                             if (reconnectTimeoutRef.current) {
                                 clearTimeout(reconnectTimeoutRef.current);
                             }
-
-                            // Don't disconnect if the page is hidden (tab switched/minimized)
                             if (document.hidden) {
                                 console.log('Page is hidden, maintaining connection...');
                                 setConnectionStatus("Połączenie wstrzymane");
                                 return;
                             }
-
-                            // Give it 30 seconds to reconnect before hanging up
                             reconnectTimeoutRef.current = setTimeout(() => {
                                 if (pc.connectionState === 'disconnected' && !document.hidden && !isIntentionalDisconnectRef.current) {
                                     console.log('Connection failed to recover, hanging up...');
@@ -406,14 +385,12 @@ export default function RoomPage() {
                                 }
                             }, 30000);
                         } else if (pc.connectionState === 'connected') {
-                            // Clear any pending disconnect timeout
                             if (reconnectTimeoutRef.current) {
                                 clearTimeout(reconnectTimeoutRef.current);
                                 reconnectTimeoutRef.current = null;
                             }
                             setConnectionStatus("connected");
                         } else if (['closed', 'failed'].includes(pc.connectionState)) {
-                            // These are terminal states, hang up immediately
                             if (reconnectTimeoutRef.current) {
                                 clearTimeout(reconnectTimeoutRef.current);
                                 reconnectTimeoutRef.current = null;
@@ -425,14 +402,10 @@ export default function RoomPage() {
                     }
                 };
 
-                // Also monitor ICE connection state (more reliable in some browsers)
                 pc.oniceconnectionstatechange = () => {
                     if (pc && !isIntentionalDisconnectRef.current) {
                         console.log('ICE connection state:', pc.iceConnectionState);
-
-                        // Use ICE state for more accurate connection detection
                         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-                            // Clear any pending disconnect timeout
                             if (reconnectTimeoutRef.current) {
                                 clearTimeout(reconnectTimeoutRef.current);
                                 reconnectTimeoutRef.current = null;
@@ -441,6 +414,7 @@ export default function RoomPage() {
                         }
                     }
                 };
+                
                 channel.bind('webrtc-offer', async (data: any) => {
                     if (!isInitiator && pc.signalingState === 'stable') {
                         console.log('Received offer');
@@ -466,13 +440,11 @@ export default function RoomPage() {
                 });
 
                 channel.bind('call-ended', handleHangUp);
-
-                // Handle presence events
+                
                 channel.bind('pusher:subscription_succeeded', (members: any) => {
                     console.log('Successfully subscribed to channel');
                     const memberCount = Object.keys(members.members).length;
                     console.log(`Members in room: ${memberCount}`);
-
                     if (memberCount > 1 && isInitiator) {
                         console.log('Other participant already in room, creating offer...');
                         setTimeout(createOffer, 1000);
@@ -494,25 +466,19 @@ export default function RoomPage() {
                     }
                 });
 
-                // KROK 5: Handle page visibility changes
                 handleVisibilityChange = () => {
                     if (document.hidden) {
                         console.log('Page is hidden, maintaining connection...');
-                        // Clear any disconnect timeout when page is hidden
                         if (reconnectTimeoutRef.current) {
                             clearTimeout(reconnectTimeoutRef.current);
                             reconnectTimeoutRef.current = null;
                         }
                     } else {
                         console.log('Page is visible again');
-                        // When page becomes visible, check connection state
                         if (pc.connectionState === 'disconnected') {
                             console.log('Connection disconnected while hidden, attempting to restart ICE...');
                             setConnectionStatus("Wznawianie połączenia...");
-                            // Try to kickstart the connection
                             pc.restartIce();
-
-                            // Set a new timeout for reconnection
                             if (reconnectTimeoutRef.current) {
                                 clearTimeout(reconnectTimeoutRef.current);
                             }
@@ -521,7 +487,7 @@ export default function RoomPage() {
                                     console.log('Failed to reconnect after page became visible');
                                     handleHangUp();
                                 }
-                            }, 15000); // 15 seconds to reconnect after becoming visible
+                            }, 15000);
                         } else if (pc.connectionState === 'connected') {
                             setConnectionStatus("connected");
                         }
@@ -529,18 +495,12 @@ export default function RoomPage() {
                 };
 
                 document.addEventListener('visibilitychange', handleVisibilityChange);
-
-                // KROK 6: Create a data channel for keep-alive
+                
                 const dataChannel = pc.createDataChannel('keepAlive', { ordered: true });
+                dataChannel.onopen = () => console.log('Data channel opened for keep-alive');
 
-                dataChannel.onopen = () => {
-                    console.log('Data channel opened for keep-alive');
-                };
-
-                // KROK 7: Keep connection alive
                 keepAliveInterval = setInterval(() => {
                     if (pc && pc.connectionState === 'connected') {
-                        // Send a ping through data channel if it's open
                         if (dataChannel.readyState === 'open') {
                             try {
                                 dataChannel.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
@@ -548,15 +508,10 @@ export default function RoomPage() {
                                 console.log('Failed to send keep-alive ping');
                             }
                         }
-
-                        // Also check stats to keep the connection active
-                        pc.getStats().then(stats => {
-                            console.log('Connection alive check at', new Date().toLocaleTimeString());
-                        });
+                        pc.getStats().then(() => console.log('Connection alive check at', new Date().toLocaleTimeString()));
                     }
-                }, 3000); // Check every 3 seconds instead of 5
+                }, 3000);
 
-                // KROK 8: Status
                 setConnectionStatus("Oczekiwanie na drugiego uczestnika...");
 
             } catch (error: any) {
@@ -571,17 +526,9 @@ export default function RoomPage() {
         return () => {
             isCleanupDone = true;
             isIntentionalDisconnectRef.current = true;
-
-            if (reconnectTimeoutRef.current) {
-                clearTimeout(reconnectTimeoutRef.current);
-                reconnectTimeoutRef.current = null;
-            }
-            if (handleVisibilityChange) {
-                document.removeEventListener('visibilitychange', handleVisibilityChange);
-            }
-            if (keepAliveInterval) {
-                clearInterval(keepAliveInterval);
-            }
+            if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+            if (handleVisibilityChange) document.removeEventListener('visibilitychange', handleVisibilityChange);
+            if (keepAliveInterval) clearInterval(keepAliveInterval);
             if (channelRef.current) channelRef.current.unsubscribe();
             if (pusherRef.current) pusherRef.current.disconnect();
             if (peerConnectionRef.current) peerConnectionRef.current.close();
@@ -590,7 +537,6 @@ export default function RoomPage() {
         };
     }, [roomId, sessionStatus, session, handleHangUp, sendSignal]);
 
-    // Handle when remote screen share ends
     useEffect(() => {
         if (!remoteScreenStream && primaryView === 'screen' && remoteCameraStream) {
             setPrimaryView('camera');
@@ -618,6 +564,8 @@ export default function RoomPage() {
 
     return (
         <div className="relative w-full h-screen bg-slate-900 text-white flex flex-col items-center justify-center overflow-hidden">
+            {/* ... reszta twojego JSX pozostaje bez zmian ... */}
+            {/* ... skopiuj całą swoją sekcję return z oryginalnego pliku tutaj ... */}
             <AnimatePresence>
                 {connectionStatus !== 'connected' && !isCallEnded && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-800/80 backdrop-blur-sm rounded-lg px-4 py-2 flex items-center gap-3">
@@ -633,7 +581,6 @@ export default function RoomPage() {
                 <video ref={remoteVideoRef} autoPlay playsInline className={`w-full h-full object-contain`} />
                 {!mainStream && !isCallEnded && <VideoPlaceholder text={connectionStatus} isError={hasMediaError} />}
 
-                {/* Show indicator when viewing screen share */}
                 {primaryView === 'screen' && remoteScreenStream && remoteCameraStream && (
                     <motion.div
                         initial={{ opacity: 0, y: -20 }}
@@ -644,8 +591,6 @@ export default function RoomPage() {
                         <span className="text-white text-sm font-medium">Udostępniony ekran</span>
                     </motion.div>
                 )}
-
-                {/* Show swap hint */}
                 <AnimatePresence>
                     {showSwapHint && remoteCameraStream && remoteScreenStream && (
                         <motion.div
@@ -683,13 +628,11 @@ export default function RoomPage() {
                             muted
                             className="w-full h-full object-cover rounded-xl shadow-2xl border-2 border-white/20 group-hover:border-white/40 transition-all"
                         />
-                        {/* Show an icon indicator for screen share */}
                         {primaryView === 'camera' && remoteScreenStream && (
                             <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm rounded-md p-1.5">
                                 <FiMonitor className="w-4 h-4 text-white" />
                             </div>
                         )}
-                        {/* Show swap icon on hover */}
                         {remoteCameraStream && remoteScreenStream && (
                             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center">
                                 <div className="bg-white/10 backdrop-blur-sm rounded-full p-3">
