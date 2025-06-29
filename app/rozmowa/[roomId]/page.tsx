@@ -269,7 +269,7 @@ export default function RoomPage() {
                 setConnectionStatus("Pobieranie konfiguracji połączenia...");
                 const iceConfig = await getICEServers();
                 console.log("Successfully fetched ICE servers:", iceConfig);
-                if (!iceConfig || iceConfig.iceServers.length <= 2) {
+                if (!iceConfig || iceConfig.iceServers!.length <= 2) {
                     console.warn("Using fallback STUN servers. TURN servers might be missing.");
                 }
 
