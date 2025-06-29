@@ -1,13 +1,11 @@
-// FILE: app/moje-terminy/page.tsx
-
 "use client";
 
 import React, { useState, useEffect, useMemo, JSX } from 'react';
 import { motion, AnimatePresence } from "framer-motion";
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { FiCalendar, FiClock, FiX, FiCheckCircle, FiArrowRight, FiMonitor, FiHome, FiMapPin, FiAlertTriangle, FiLoader } from 'react-icons/fi';
-import { useIsMobile } from '@/lib/useIsMobile'; // KROK 1: Import
+import { FiCalendar, FiClock, FiX, FiCheckCircle, FiArrowRight, FiMonitor, FiHome, FiMapPin, FiAlertTriangle, FiLoader, FiSlash } from 'react-icons/fi';
+import { useIsMobile } from '@/lib/useIsMobile';
 
 type AppointmentStatus = 'UPCOMING' | 'COMPLETED' | 'CANCELLED';
 type AppointmentType = 'ONLINE' | 'TEACHER_HOME' | 'STUDENT_HOME';
@@ -29,10 +27,16 @@ const typeDetails: Record<AppointmentType, { icon: JSX.Element, text: string }> 
     STUDENT_HOME: { icon: <FiMapPin />, text: "U ucznia" },
 };
 
+const statusDetails: Record<AppointmentStatus, { icon: JSX.Element, text: string, cardClass: string, textClass: string }> = {
+    UPCOMING: { icon: <FiArrowRight />, text: "Nadchodzące", cardClass: 'border-purple-500/30 hover:border-purple-400', textClass: 'bg-cyan-500/10 text-cyan-300' },
+    COMPLETED: { icon: <FiCheckCircle />, text: "Zakończone", cardClass: 'border-slate-700', textClass: 'bg-slate-700 text-slate-400' },
+    CANCELLED: { icon: <FiSlash />, text: "Anulowane", cardClass: 'border-red-500/20', textClass: 'bg-red-500/10 text-red-400' },
+};
+
 export default function MojeTerminyPage() {
     const { data: session, status: sessionStatus } = useSession();
-    const router = useRouter(); // Używamy routera w głównym komponencie
-    const isMobile = useIsMobile(); // KROK 2: Użycie hooka
+    const router = useRouter();
+    const isMobile = useIsMobile();
 
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
@@ -58,7 +62,7 @@ export default function MojeTerminyPage() {
                 }
             } else if (sessionStatus === 'unauthenticated') {
                 setIsLoading(false);
-                router.push('/login'); // Przekierowanie, jeśli użytkownik nie jest zalogowany
+                router.push('/login');
             }
         };
         getAppointments();
@@ -70,14 +74,23 @@ export default function MojeTerminyPage() {
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
         [appointments]
     );
-
+    
+    // ZMIANA 1: Filtr tylko dla 'COMPLETED'
     const completedAppointments: Appointment[] = useMemo(() =>
         appointments
-            .filter(a => a.status !== 'UPCOMING')
+            .filter(a => a.status === 'COMPLETED')
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
         [appointments]
     );
-    
+
+    // ZMIANA 2: Dodajemy nową listę dla terminów anulowanych
+    const cancelledAppointments: Appointment[] = useMemo(() =>
+        appointments
+            .filter(a => a.status === 'CANCELLED')
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+        [appointments]
+    );
+
     const renderContent = () => {
         if (isLoading || sessionStatus === 'loading') {
             return <AppointmentsSkeleton />;
@@ -86,7 +99,7 @@ export default function MojeTerminyPage() {
             return <ErrorMessage message={error} />;
         }
         if (sessionStatus === 'unauthenticated') {
-            return null; // Nie renderuj niczego, podczas gdy router przekierowuje
+            return null;
         }
         if (appointments.length === 0) {
             return <EmptyState />;
@@ -94,14 +107,24 @@ export default function MojeTerminyPage() {
         return (
             <>
                 <SectionTitle title="Nadchodzące" isMobile={isMobile}/>
-                {upcomingAppointments.length > 0 ? upcomingAppointments.map((app, i) => (
+                {upcomingAppointments.length > 0 ? upcomingAppointments.map((app) => (
                     <AppointmentCard key={app.id} appointment={app} onSelect={setSelectedAppointment} isMobile={isMobile} />
                 )) : <p className="pl-8 text-slate-400 font-sans mb-12">Brak nadchodzących terminów.</p>}
 
                 <SectionTitle title="Zakończone" isMobile={isMobile} />
-                {completedAppointments.length > 0 ? completedAppointments.map((app, i) => (
+                {completedAppointments.length > 0 ? completedAppointments.map((app) => (
                     <AppointmentCard key={app.id} appointment={app} onSelect={setSelectedAppointment} isMobile={isMobile} />
-                )) : <p className="pl-8 text-slate-400 font-sans">Brak zakończonych lekcji.</p>}
+                )) : <p className="pl-8 text-slate-400 font-sans mb-12">Brak zakończonych lekcji.</p>}
+                
+                {/* ZMIANA 3: Dodajemy nową sekcję dla anulowanych terminów */}
+                {cancelledAppointments.length > 0 && (
+                    <>
+                        <SectionTitle title="Anulowane" isMobile={isMobile} />
+                        {cancelledAppointments.map((app) => (
+                            <AppointmentCard key={app.id} appointment={app} onSelect={setSelectedAppointment} isMobile={isMobile} />
+                        ))}
+                    </>
+                )}
             </>
         );
     };
@@ -148,10 +171,35 @@ export default function MojeTerminyPage() {
 const SectionTitle = ({ title, isMobile }: { title: string, isMobile: boolean }) => (<motion.div initial={isMobile ? { opacity: 1 } : { opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true, amount: 0.5 }} className="relative mb-8 ml-8"><div className="absolute top-1/2 -left-12 w-6 h-6 bg-slate-900 border-4 border-purple-500 rounded-full -translate-y-1/2"></div><h2 className="text-3xl">{title}</h2></motion.div>);
 
 const AppointmentCard = ({ appointment, onSelect, isMobile }: { appointment: Appointment, onSelect: (app: Appointment) => void, isMobile: boolean }) => {
+    const details = statusDetails[appointment.status];
     const isUpcoming = appointment.status === 'UPCOMING';
-    const cardColor = isUpcoming ? 'border-purple-500/30 hover:border-purple-400' : 'border-slate-700';
     const textColor = isUpcoming ? 'text-white' : 'text-slate-500';
-    return (<motion.div initial={isMobile ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.5 }} transition={{ duration: 0.5 }} onClick={() => onSelect(appointment)} className={`relative mb-8 ml-8 p-6 rounded-2xl bg-slate-800/50 border backdrop-blur-sm cursor-pointer transition-all duration-300 ${cardColor} ${textColor}`}> <div className="absolute top-1/2 -left-12 w-4 h-4 bg-slate-700 rounded-full -translate-y-1/2"></div><div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"><div><h3 className={`text-2xl ${!isUpcoming && 'line-through'}`}>{appointment.subject}</h3><div className="font-sans text-sm flex items-center gap-4 mt-1 text-purple-300/80"><span>{new Date(appointment.date).toLocaleDateString('pl-PL', { day: '2-digit', month: 'short', year: 'numeric' })}</span><span>{new Date(appointment.date).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}</span></div></div><div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-sans ${isUpcoming ? 'bg-cyan-500/10 text-cyan-300' : 'bg-slate-700 text-slate-400'}`}>{isUpcoming ? <FiArrowRight /> : <FiCheckCircle />}<span>{isUpcoming ? 'Nadchodzące' : 'Zakończone'}</span></div></div></motion.div>);
+    
+    return (
+        <motion.div 
+            initial={isMobile ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }} 
+            whileInView={{ opacity: 1, x: 0 }} 
+            viewport={{ once: true, amount: 0.5 }} 
+            transition={{ duration: 0.5 }} 
+            onClick={() => onSelect(appointment)} 
+            className={`relative mb-8 ml-8 p-6 rounded-2xl bg-slate-800/50 border backdrop-blur-sm cursor-pointer transition-all duration-300 ${details.cardClass} ${textColor}`}
+        >
+            <div className="absolute top-1/2 -left-12 w-4 h-4 bg-slate-700 rounded-full -translate-y-1/2"></div>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h3 className={`text-2xl ${!isUpcoming && 'line-through'}`}>{appointment.subject}</h3>
+                    <div className="font-sans text-sm flex items-center gap-4 mt-1 text-purple-300/80">
+                        <span>{new Date(appointment.date).toLocaleDateString('pl-PL', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                        <span>{new Date(appointment.date).toLocaleTimeString('pl--PL', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                </div>
+                <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-sans ${details.textClass}`}>
+                    {details.icon}
+                    <span>{details.text}</span>
+                </div>
+            </div>
+        </motion.div>
+    );
 };
 
 const InfoRow = ({ icon, label, value }: { icon: JSX.Element, label: string, value: string }) => (<div className="flex items-start justify-between"><span className="flex items-center gap-3 text-purple-200/80">{icon}{label}</span><span className="text-right">{value}</span></div>);

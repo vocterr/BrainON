@@ -9,17 +9,22 @@ export async function GET(request: Request) {
         // 1. Sprawdzamy sesję, aby upewnić się, że użytkownik jest zalogowany
         const session = await getServerSession(authOptions);
 
+        if (!session || !session.user) {
+            return NextResponse.json({ error: 'Brak autoryzacji' }, { status: 401 });
+        }
 
-        // 3. Pobieramy wszystkie terminy z bazy danych
+        // 3. Pobieramy wszystkie terminy z bazy danych dla zalogowanego użytkownika
         const appointments = await prisma.appointment.findMany({
             // Sortujemy wyniki od najnowszych
             orderBy: {
                 date: 'desc',
             },
             where: {
-                studentId: session?.user.id
+                // Filtrujemy po ID studenta z sesji
+                studentId: session.user.id
             },
-            // Dołączamy dane ucznia do każdego terminu, aby wyświetlić jego imię i email
+            // Dołączamy dane ucznia do każdego terminu, chociaż tutaj filtrujemy po jego ID
+            // to może być przydatne w innych kontekstach. W tym przypadku nie jest konieczne.
             include: {
                 student: {
                     select: {
@@ -39,6 +44,3 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Wystąpił wewnętrzny błąd serwera' }, { status: 500 });
     }
 }
-
-// W przyszłości możesz tu dodać funkcję POST do tworzenia nowych terminów
-// export async function POST(request: Request) { ... }
