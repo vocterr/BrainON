@@ -17,9 +17,6 @@ export async function GET() {
     }
 
     const iceServers = [
-        // Publiczne serwery STUN
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
         { urls: "stun:openrelay.metered.ca:80" },
 
         // Publiczne serwery TURN z Open Relay Project
