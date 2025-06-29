@@ -1,34 +1,39 @@
 // FILE: lib/webrtc-utils.ts
 
-// ==================================================================
-// FINAL UPDATE: Added free, public TURN servers for robust connectivity
-// This is the key to making the connection stable on difficult networks like mobile.
-// ==================================================================
+// Simple function to get ICE servers from Metered.ca
+export const getICEServers = async (): Promise<RTCConfiguration> => {
+    try {
+        const response = await fetch('/api/ice-servers');
+        if (response.ok) {
+            const data = await response.json();
+            return {
+                iceServers: data.iceServers,
+                iceCandidatePoolSize: 10,
+            };
+        }
+    } catch (error) {
+        console.error('Failed to fetch TURN credentials:', error);
+    }
+    
+    // Fallback to just STUN if API fails
+    return {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+        ],
+        iceCandidatePoolSize: 10,
+    };
+};
+
+// Keep the ICE_SERVERS export for backward compatibility
 export const ICE_SERVERS: RTCConfiguration = {
     iceServers: [
-        // Standard Google STUN servers
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-
-        // Adding a free, public TURN server.
-        // For a real production app, you would want to host your own.
-        {
-            urls: "turn:openrelay.metered.ca:80",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-        },
-        {
-            urls: "turn:openrelay.metered.ca:443",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-        },
     ],
 };
 
-
-// The rest of this file is correct and does not need to change.
-
+// The rest of your existing code remains exactly the same
 const FALLBACK_MEDIA_CONSTRAINTS: MediaStreamConstraints[] = [
     {
         video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
@@ -164,7 +169,6 @@ export const getConnectionQuality = async (pc: RTCPeerConnection): Promise<{
         return { quality: 'unknown', stats: {} };
     }
 };
-
 
 export const createSafeOffer = async (
     pc: RTCPeerConnection,
