@@ -23,9 +23,6 @@ export async function GET() {
     // Zawiera ona publiczne serwery STUN (jako pierwszy wybór)
     // oraz serwery TURN od Metered (jako niezawodny fallback)
     const iceServers = [
-        // Serwery STUN (darmowe, publiczne)
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
         
         // Serwery TURN od Metered z Twoimi danymi
         // Adresy są standardowe dla regionu Global
