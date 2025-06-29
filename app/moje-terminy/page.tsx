@@ -1,3 +1,5 @@
+// Plik: app/moje-terminy/page.tsx
+
 "use client";
 
 import React, { useState, useEffect, useMemo, JSX } from 'react';
@@ -33,6 +35,9 @@ const statusDetails: Record<AppointmentStatus, { icon: JSX.Element, text: string
     CANCELLED: { icon: <FiSlash />, text: "Anulowane", cardClass: 'border-red-500/20', textClass: 'bg-red-500/10 text-red-400' },
 };
 
+// Zabezpieczenie na wypadek nieprawidłowego statusu
+const fallbackStatusDetails = statusDetails.COMPLETED;
+
 export default function MojeTerminyPage() {
     const { data: session, status: sessionStatus } = useSession();
     const router = useRouter();
@@ -51,7 +56,8 @@ export default function MojeTerminyPage() {
                 try {
                     const res = await fetch('/api/moje-terminy');
                     if (!res.ok) {
-                        throw new Error('Nie udało się pobrać terminów.');
+                        const errorData = await res.json();
+                        throw new Error(errorData.error || 'Nie udało się pobrać terminów.');
                     }
                     const data = await res.json();
                     setAppointments(data);
@@ -65,7 +71,9 @@ export default function MojeTerminyPage() {
                 router.push('/login');
             }
         };
-        getAppointments();
+        if (sessionStatus !== 'loading') {
+            getAppointments();
+        }
     }, [sessionStatus, router]);
 
     const upcomingAppointments: Appointment[] = useMemo(() =>
@@ -75,7 +83,6 @@ export default function MojeTerminyPage() {
         [appointments]
     );
     
-    // ZMIANA 1: Filtr tylko dla 'COMPLETED'
     const completedAppointments: Appointment[] = useMemo(() =>
         appointments
             .filter(a => a.status === 'COMPLETED')
@@ -83,7 +90,6 @@ export default function MojeTerminyPage() {
         [appointments]
     );
 
-    // ZMIANA 2: Dodajemy nową listę dla terminów anulowanych
     const cancelledAppointments: Appointment[] = useMemo(() =>
         appointments
             .filter(a => a.status === 'CANCELLED')
@@ -116,7 +122,6 @@ export default function MojeTerminyPage() {
                     <AppointmentCard key={app.id} appointment={app} onSelect={setSelectedAppointment} isMobile={isMobile} />
                 )) : <p className="pl-8 text-slate-400 font-sans mb-12">Brak zakończonych lekcji.</p>}
                 
-                {/* ZMIANA 3: Dodajemy nową sekcję dla anulowanych terminów */}
                 {cancelledAppointments.length > 0 && (
                     <>
                         <SectionTitle title="Anulowane" isMobile={isMobile} />
@@ -171,7 +176,8 @@ export default function MojeTerminyPage() {
 const SectionTitle = ({ title, isMobile }: { title: string, isMobile: boolean }) => (<motion.div initial={isMobile ? { opacity: 1 } : { opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true, amount: 0.5 }} className="relative mb-8 ml-8"><div className="absolute top-1/2 -left-12 w-6 h-6 bg-slate-900 border-4 border-purple-500 rounded-full -translate-y-1/2"></div><h2 className="text-3xl">{title}</h2></motion.div>);
 
 const AppointmentCard = ({ appointment, onSelect, isMobile }: { appointment: Appointment, onSelect: (app: Appointment) => void, isMobile: boolean }) => {
-    const details = statusDetails[appointment.status];
+    // POPRAWKA 1: Zabezpieczenie przed nieprawidłowym statusem
+    const details = statusDetails[appointment.status] || fallbackStatusDetails;
     const isUpcoming = appointment.status === 'UPCOMING';
     const textColor = isUpcoming ? 'text-white' : 'text-slate-500';
     
@@ -190,7 +196,8 @@ const AppointmentCard = ({ appointment, onSelect, isMobile }: { appointment: App
                     <h3 className={`text-2xl ${!isUpcoming && 'line-through'}`}>{appointment.subject}</h3>
                     <div className="font-sans text-sm flex items-center gap-4 mt-1 text-purple-300/80">
                         <span>{new Date(appointment.date).toLocaleDateString('pl-PL', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                        <span>{new Date(appointment.date).toLocaleTimeString('pl--PL', { hour: '2-digit', minute: '2-digit' })}</span>
+                        {/* POPRAWKA 2: Usunięto literówkę w 'pl--PL' na 'pl-PL' */}
+                        <span>{new Date(appointment.date).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                 </div>
                 <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-sans ${details.textClass}`}>
@@ -203,7 +210,7 @@ const AppointmentCard = ({ appointment, onSelect, isMobile }: { appointment: App
 };
 
 const InfoRow = ({ icon, label, value }: { icon: JSX.Element, label: string, value: string }) => (<div className="flex items-start justify-between"><span className="flex items-center gap-3 text-purple-200/80">{icon}{label}</span><span className="text-right">{value}</span></div>);
-const AppointmentsSkeleton = () => (<div className="relative pl-8">{[...Array(3)].map((_, i) => <div key={i} className="mb-8 p-6 rounded-2xl bg-slate-800/50 h-24 animate-pulse"><div className="w-2/3 h-6 bg-slate-700/50 rounded"></div><div className="w-1/3 h-4 bg-slate-700/50 rounded mt-3"></div></div>)}</div>);
+const AppointmentsSkeleton = () => (<div className="relative pl-8">{[...Array(3)].map((_, i) => <div key={i} className="mb-8 p-6 rounded-2xl bg-slate-800/50 h-24 animate-pulse"><div className="w-1/3 h-6 bg-slate-700/50 rounded"></div><div className="w-1/2 h-4 bg-slate-700/50 rounded mt-3"></div></div>)}</div>);
 const ErrorMessage = ({ message }: { message: string }) => (<div className="pl-8 flex flex-col items-center text-center"><FiAlertTriangle className="w-12 h-12 text-red-500 mb-4" /><h3 className="text-2xl">Wystąpił błąd</h3><p className="font-sans text-slate-400">{message}</p></div>);
 const EmptyState = () => {
     const router = useRouter();
