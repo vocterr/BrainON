@@ -274,7 +274,7 @@ export default function RoomPage() {
                 }
 
                 // KROK 2: Stwórz połączenie WebRTC
-                setConnectionStatus("Tworzenie połączenia...");
+                setConnectionStatus("Tworzenie połączeniaa...");
                 const pc = new RTCPeerConnection({
                     ...iceConfig, // <-- Używamy pobranej konfiguracji
                     iceCandidatePoolSize: 30,
