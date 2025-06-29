@@ -11,7 +11,7 @@ import {
     FiMonitor, FiAirplay
 } from 'react-icons/fi';
 // ZMIANA 1: Importujemy 'getICEServers' i usuwamy 'ICE_SERVERS'
-import { getICEServers, getMediaStreamWithFallback, handleMediaStreamError } from '@/lib/webrtc-utils';
+import {getMediaStreamWithFallback, handleMediaStreamError, ICE_SERVERS } from '@/lib/webrtc-utils';
 
 const useIsMobile = (breakpoint = 768) => {
     const [isMobile, setIsMobile] = useState(false);
@@ -267,9 +267,9 @@ export default function RoomPage() {
                 // ==========================================================
                 console.log("Fetching ICE servers from API...");
                 setConnectionStatus("Pobieranie konfiguracji połączenia...");
-                const iceConfig = await getICEServers();
+                const iceConfig = ICE_SERVERS
                 console.log("Successfully fetched ICE servers:", iceConfig);
-                if (!iceConfig || iceConfig.iceServers!.length <= 2) {
+                if (!iceConfig || iceConfig!.length <= 2) {
                     console.warn("Using fallback STUN servers. TURN servers might be missing.");
                 }
 

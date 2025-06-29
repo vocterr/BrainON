@@ -1,37 +1,25 @@
 // FILE: lib/webrtc-utils.ts
-
-// Simple function to get ICE servers from Metered.ca
-export const getICEServers = async (): Promise<RTCConfiguration> => {
-    try {
-        const response = await fetch('/api/ice-servers');
-        if (response.ok) {
-            const data = await response.json();
-            return {
-                iceServers: data.iceServers,
-                iceCandidatePoolSize: 10,
-            };
-        }
-    } catch (error) {
-        console.error('Failed to fetch TURN credentials:', error);
-    }
-    
-    // Fallback to just STUN if API fails
-    return {
-        iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-        ],
-        iceCandidatePoolSize: 10,
-    };
-};
-
 // Keep the ICE_SERVERS export for backward compatibility
-export const ICE_SERVERS: RTCConfiguration = {
-    iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-    ],
-};
+export const ICE_SERVERS = [
+        { urls: "stun:openrelay.metered.ca:80" },
+
+        // Publiczne serwery TURN z Open Relay Project
+        {
+            urls: "turn:openrelay.metered.ca:80",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+        },
+        {
+            urls: "turn:openrelay.metered.ca:443",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+        },
+        {
+            urls: "turn:openrelay.metered.ca:443?transport=tcp",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+        }
+    ]
 
 // The rest of your existing code remains exactly the same
 const FALLBACK_MEDIA_CONSTRAINTS: MediaStreamConstraints[] = [
