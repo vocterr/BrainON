@@ -1,25 +1,28 @@
 // FILE: lib/webrtc-utils.ts
 // Keep the ICE_SERVERS export for backward compatibility
 export const ICE_SERVERS = [
-        { urls: "stun:openrelay.metered.ca:80" },
+    // Dwa niezawodne, globalne serwery STUN od Google jako pierwszy wybór
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
 
-        // Publiczne serwery TURN z Open Relay Project
-        {
-            urls: "turn:openrelay.metered.ca:80",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-        },
-        {
-            urls: "turn:openrelay.metered.ca:443",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-        },
-        {
-            urls: "turn:openrelay.metered.ca:443?transport=tcp",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-        }
-    ]
+    // Serwery z Open Relay (STUN + TURN) jako opcja i fallback
+    { urls: "stun:openrelay.metered.ca:80" },
+    {
+        urls: "turn:openrelay.metered.ca:80",
+        username: "openrelayproject",
+        credential: "openrelayproject",
+    },
+    {
+        urls: "turn:openrelay.metered.ca:443",
+        username: "openrelayproject",
+        credential: "openrelayproject",
+    },
+    {
+        urls: "turn:openrelay.metered.ca:443?transport=tcp",
+        username: "openrelayproject",
+        credential: "openrelayproject",
+    }
+];
 
 // The rest of your existing code remains exactly the same
 const FALLBACK_MEDIA_CONSTRAINTS: MediaStreamConstraints[] = [

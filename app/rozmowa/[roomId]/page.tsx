@@ -11,7 +11,7 @@ import {
     FiMonitor, FiAirplay
 } from 'react-icons/fi';
 // ZMIANA 1: Importujemy 'getICEServers' i usuwamy 'ICE_SERVERS'
-import {getMediaStreamWithFallback, handleMediaStreamError, ICE_SERVERS } from '@/lib/webrtc-utils';
+import { getMediaStreamWithFallback, handleMediaStreamError, ICE_SERVERS } from '@/lib/webrtc-utils';
 
 const useIsMobile = (breakpoint = 768) => {
     const [isMobile, setIsMobile] = useState(false);
@@ -267,21 +267,15 @@ export default function RoomPage() {
                 // ==========================================================
                 console.log("Fetching ICE servers from API...");
                 setConnectionStatus("Pobieranie konfiguracji połączenia...");
-                const iceConfig = ICE_SERVERS
-                console.log("Successfully fetched ICE servers:", iceConfig);
-                if (!iceConfig || iceConfig!.length <= 2) {
-                    console.warn("Using fallback STUN servers. TURN servers might be missing.");
-                }
-
-                // KROK 2: Stwórz połączenie WebRTC
                 setConnectionStatus("Tworzenie połączeniaa...");
                 const pc = new RTCPeerConnection({
-                    ...iceConfig,
+                    iceServers: ICE_SERVERS, // <-- KLUCZOWA ZMIANA
                     iceCandidatePoolSize: 30,
-                    iceTransportPolicy: 'all',      // <-- dodane
-                    bundlePolicy: 'max-bundle',     // <-- dodane
-                    rtcpMuxPolicy: 'require',       // <-- dodane
+                    iceTransportPolicy: 'all',
+                    bundlePolicy: 'max-bundle',
+                    rtcpMuxPolicy: 'require',
                 });
+                peerConnectionRef.current = pc;
                 peerConnectionRef.current = pc;
 
 
