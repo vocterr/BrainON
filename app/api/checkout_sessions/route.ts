@@ -34,7 +34,7 @@ export async function POST(request: Request) {
         }
         
         const checkoutSession = await stripe.checkout.sessions.create({
-            payment_method_types: ['card', 'p24', 'blik'],
+            payment_method_types: ['card', 'blik'],
             line_items: [
                 {
                     price_data: {
