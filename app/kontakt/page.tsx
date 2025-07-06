@@ -1,19 +1,18 @@
-// FILE: app/kontakt/page.tsx
-
 "use client";
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, FormEvent } from 'react';
-import { FiMail, FiInstagram, FiYoutube, FiSend, FiLoader, FiCheckCircle, FiPhone, FiFacebook } from 'react-icons/fi';
-import { useIsMobile } from '@/lib/useIsMobile'; // KROK 1: Import
+import { FiMail, FiInstagram, FiYoutube, FiSend, FiLoader, FiCheckCircle, FiPhone, FiFacebook, FiAlertCircle } from 'react-icons/fi';
+import { useIsMobile } from '@/lib/useIsMobile';
 
 export default function ContactPage() {
-    const isMobile = useIsMobile(); // KROK 2: Użycie hooka
-    const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
+    const isMobile = useIsMobile();
+    const [formData, setFormData] = useState({ name: '', email: '', message: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSubmitted, setIsSubmitted] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
@@ -21,19 +20,37 @@ export default function ContactPage() {
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
-        console.log("Wysyłanie danych:", formData);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        setIsSubmitting(false);
-        setIsSubmitted(true);
-        setTimeout(() => {
-            setIsSubmitted(false);
-            setFormData({ name: '', email: '', subject: '', message: '' });
-        }, 4000);
+        setError(null);
+
+        try {
+            const response = await fetch('/api/contact', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Something went wrong');
+            }
+
+            setIsSubmitted(true);
+            setTimeout(() => {
+                setIsSubmitted(false);
+                setFormData({ name: '', email: '', message: '' });
+            }, 4000);
+
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const containerVariants = {
         hidden: { opacity: 0 },
-        // KROK 3: Warunkowa animacja
         visible: { opacity: 1, transition: { staggerChildren: isMobile ? 0 : 0.2, duration: 0.5 } },
     };
 
@@ -57,7 +74,6 @@ export default function ContactPage() {
                 </div>
 
                 <motion.div
-                    // KROK 4: Zastosowanie warunkowych animacji
                     variants={isMobile ? undefined : containerVariants}
                     initial="hidden"
                     animate="visible"
@@ -74,6 +90,7 @@ export default function ContactPage() {
 
                     <div className="grid md:grid-cols-2 gap-16 items-start">
                         <motion.div variants={isMobile ? undefined : itemVariants} className="flex flex-col gap-8">
+                            {/* Contact Info Blocks */}
                             <div className="p-8 rounded-3xl bg-slate-800/50 border border-purple-500/30 backdrop-blur-sm">
                                 <div className="flex items-center gap-4 mb-4">
                                     <FiMail className="w-8 h-8 text-purple-400" />
@@ -101,7 +118,7 @@ export default function ContactPage() {
                                 <p className="font-sans text-purple-200/70 mb-6">Śledź mnie na mediach społecznościowych, aby być na bieżąco z nowościami i darmowymi materiałami.</p>
                                 <div className="flex items-center gap-4">
                                     {socialLinks.map((social, index) => (
-                                        <motion.a 
+                                        <motion.a
                                             key={index}
                                             href={social.href}
                                             target="_blank"
@@ -140,7 +157,13 @@ export default function ContactPage() {
                                             <textarea id="message" name="message" value={formData.message} onChange={handleChange} required rows={5} className="peer w-full p-4 bg-slate-700/50 rounded-xl border border-purple-500/40 text-white outline-none focus:border-purple-400 transition-all resize-none" />
                                             <label htmlFor="message" className={`absolute left-4 transition-all text-purple-300/80 pointer-events-none ${formData.message ? 'top-[-10px] text-xs bg-slate-800 px-1' : 'top-4 text-base'}`}>Twoja wiadomość</label>
                                         </div>
-                                        <motion.button 
+                                        {error && (
+                                            <div className="flex items-center gap-2 text-red-400 font-sans p-2 bg-red-500/10 rounded-lg">
+                                                <FiAlertCircle />
+                                                <span>{error}</span>
+                                            </div>
+                                        )}
+                                        <motion.button
                                             type="submit"
                                             disabled={isSubmitting}
                                             whileHover={{ scale: 1.02 }}

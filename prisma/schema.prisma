@@ -168,3 +168,11 @@ model PasswordResetToken {
 
   @@unique([email, token])
 }
+
+model ContactSubmission {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  message   String
+  createdAt DateTime @default(now())
+}
