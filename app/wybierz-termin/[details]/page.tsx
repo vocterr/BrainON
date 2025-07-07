@@ -132,7 +132,7 @@ export default function WybierzTerminPage() {
     const options = [
         { id: 'ONLINE' as OptionType, icon: <FiMonitor />, title: 'Lekcja Online', description: 'Przez Discord, Google Meet lub inną platformę.', price: pricing.ONLINE },
         { id: 'TEACHER_HOME' as OptionType, icon: <FiHome />, title: 'U mnie w domu', description: 'Zapraszam do mojego miejsca pracy.', price: pricing.TEACHER_HOME },
-        { id: 'STUDENT_HOME' as OptionType, icon: <FiMapPin />, title: 'Dojazd do ucznia', description: 'Na terenie miasta.', price: pricing.STUDENT_HOME },
+        { id: 'STUDENT_HOME' as OptionType, icon: <FiMapPin />, title: 'Dojazd do ucznia', description: 'Na terenie powiatu kazimierskiego.', price: pricing.STUDENT_HOME },
     ];
     
     if (!date || !time || !details) {
