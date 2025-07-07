@@ -124,7 +124,7 @@ export default function WybierzTerminPage() {
 
     // Reszta kodu (dane, JSX) pozostaje bez zmian.
     
-    const pricing = { ONLINE: 100, TEACHER_HOME: 120, STUDENT_HOME: 150 };
+    const pricing = { ONLINE: 45, TEACHER_HOME: 50, STUDENT_HOME: 65 };
     const subjects = [
         { id: 'MATEMATYKA' as Subject, icon: <FiDivideCircle />, title: 'Matematyka' },
         { id: 'INF02' as Subject, icon: <FiCode />, title: 'Informatyka (INF.02)' },
