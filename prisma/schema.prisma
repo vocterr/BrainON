@@ -139,21 +139,22 @@ model CallRecord {
 
 // Model for appointments/lessons
 model Appointment {
-  id        String            @id @default(cuid())
-  createdAt DateTime          @default(now())
-  date      DateTime          // Data i godzina lekcji
-  status    AppointmentStatus @default(UPCOMING)
-  type      AppointmentType
-  subject   Subject
-  price     Int               // Cena w groszach
-  notes     String?           // Notatki od ucznia
+  id            String            @id @default(cuid())
+  createdAt     DateTime          @default(now())
+  date          DateTime          // Data i godzina lekcji
+  status        AppointmentStatus @default(UPCOMING)
+  type          AppointmentType
+  subject       Subject
+  price         Int               // Cena w groszach
+  notes         String?           // Notatki od ucznia
+  contactInfo   String?           // ✅ NOWE POLE: Dane kontaktowe do lekcji online
   paymentStatus String?
-  teacherId String
-  teacher   User   @relation("Teacher", fields: [teacherId], references: [id])
+  teacherId     String
+  teacher       User              @relation("Teacher", fields: [teacherId], references: [id])
 
-  studentId String
-  student   User   @relation("Student", fields: [studentId], references: [id])
-  
+  studentId     String
+  student       User              @relation("Student", fields: [studentId], references: [id])
+
   @@index([date])
   @@index([teacherId])
   @@index([studentId])

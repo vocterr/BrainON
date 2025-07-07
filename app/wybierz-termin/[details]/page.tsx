@@ -3,7 +3,8 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FiMapPin, FiMonitor, FiHome, FiArrowRight, FiLoader, FiLogIn, FiDivideCircle, FiCode, FiCreditCard } from 'react-icons/fi';
+// FiShare2 has been added for the new contact input field icon
+import { FiMapPin, FiMonitor, FiHome, FiArrowRight, FiLoader, FiLogIn, FiDivideCircle, FiCode, FiCreditCard, FiShare2 } from 'react-icons/fi';
 import { loadStripe } from '@stripe/stripe-js';
 import { useSession } from 'next-auth/react';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -30,8 +31,6 @@ export default function WybierzTerminPage() {
     let date: Date | null = null;
     if (dateStr) {
         const [year, month, day] = dateStr.split('-').map(Number);
-        // Tworzymy datę w lokalnej strefie czasowej, co jest poprawne.
-        // Miesiące w JS są 0-indeksowane, więc odejmujemy 1.
         date = new Date(year, month - 1, day);
     }
     // ==================================================================
@@ -39,6 +38,8 @@ export default function WybierzTerminPage() {
     const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
     const [selectedOption, setSelectedOption] = useState<OptionType | null>(null);
     const [notes, setNotes] = useState('');
+    // State for the new contact information field
+    const [contactInfo, setContactInfo] = useState('');
     const [formattedDate, setFormattedDate] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isBookingOnSite, setIsBookingOnSite] = useState(false); 
@@ -57,15 +58,20 @@ export default function WybierzTerminPage() {
             return null;
         }
 
+        // Validate contact information if the online option is selected
+        if (selectedOption === 'ONLINE' && !contactInfo.trim()) {
+            setError("Dla lekcji online, proszę podać dane kontaktowe.");
+            return null;
+        }
+
         const selectedOptionDetails = options.find(o => o.id === selectedOption);
-        // Tworzymy nowy obiekt daty, aby nie modyfikować oryginalnego
         const appointmentDateTime = new Date(date);
         const [hours, minutes] = time.split(':');
         appointmentDateTime.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
 
         return {
             userId: session.user.id,
-            appointmentDateTime: appointmentDateTime.toISOString(), // toISOString() jest teraz bezpieczne
+            appointmentDateTime: appointmentDateTime.toISOString(),
             subject: selectedSubject,
             option: {
                 id: selectedOptionDetails?.id,
@@ -73,6 +79,8 @@ export default function WybierzTerminPage() {
             },
             price: pricing[selectedOption],
             notes: notes,
+            // Include contactInfo in the booking data if the option is 'ONLINE'
+            contactInfo: selectedOption === 'ONLINE' ? contactInfo : undefined,
         };
     };
 
@@ -121,8 +129,6 @@ export default function WybierzTerminPage() {
             setIsBookingOnSite(false);
         }
     };
-
-    // Reszta kodu (dane, JSX) pozostaje bez zmian.
     
     const pricing = { ONLINE: 45, TEACHER_HOME: 50, STUDENT_HOME: 65 };
     const subjects = [
@@ -137,10 +143,10 @@ export default function WybierzTerminPage() {
     
     if (!date || !time || !details) {
         return (
-             <main className="w-full min-h-screen bg-slate-900 text-white font-chewy flex flex-col items-center justify-center p-4">
-                 <h1 className="text-4xl text-red-500 mb-4">Błąd</h1>
-                 <p className="font-sans text-lg text-slate-300">Nieprawidłowy link rezerwacji. Wróć do kalendarza i spróbuj ponownie.</p>
-             </main>
+            <main className="w-full min-h-screen bg-slate-900 text-white font-chewy flex flex-col items-center justify-center p-4">
+                <h1 className="text-4xl text-red-500 mb-4">Błąd</h1>
+                <p className="font-sans text-lg text-slate-300">Nieprawidłowy link rezerwacji. Wróć do kalendarza i spróbuj ponownie.</p>
+            </main>
         )
     }
 
@@ -161,6 +167,7 @@ export default function WybierzTerminPage() {
 
                 <div className="grid lg:grid-cols-5 gap-8 items-start">
                     <motion.div initial={isMobile ? {opacity:1} : { opacity: 0}} animate={{opacity: 1}} transition={{staggerChildren: 0.1}} className="lg:col-span-3 flex flex-col gap-8">
+                        {/* Step 1 */}
                         <motion.div variants={{hidden: {opacity:0, y:20}, visible: {opacity:1, y:0}}}>
                             <h3 className="text-2xl mb-4">Krok 1: Wybierz przedmiot</h3>
                             <div className="grid sm:grid-cols-2 gap-4">
@@ -175,6 +182,7 @@ export default function WybierzTerminPage() {
                             </div>
                         </motion.div>
 
+                        {/* Step 2 */}
                         <motion.div variants={{hidden: {opacity:0, y:20}, visible: {opacity:1, y:0}}}>
                             <h3 className="text-2xl mb-4">Krok 2: Wybierz formę zajęć</h3>
                             {options.map(option => (
@@ -191,12 +199,33 @@ export default function WybierzTerminPage() {
                             ))}
                         </motion.div>
                         
+                        {/* Step 3: Conditionally rendered contact info field */}
+                        {selectedOption === 'ONLINE' && (
+                             <motion.div variants={{hidden: {opacity:0, y:20}, visible: {opacity:1, y:0}}} initial="hidden" animate="visible">
+                                <h3 className="text-2xl mb-4">Krok 3: Jak się skontaktujemy?</h3>
+                                <div className="relative">
+                                    <FiShare2 className="absolute top-1/2 left-5 -translate-y-1/2 text-purple-300/70 text-xl pointer-events-none" />
+                                    <input
+                                        value={contactInfo}
+                                        onChange={(e) => {
+                                            setContactInfo(e.target.value);
+                                            if (error.includes("dane kontaktowe")) setError('');
+                                        }}
+                                        placeholder="Podaj nazwę Discord, Messenger, nr tel..."
+                                        className="w-full p-4 pl-14 rounded-xl bg-slate-800/50 border border-slate-700 font-sans text-base text-white outline-none focus:border-purple-400 transition-colors"
+                                    />
+                                </div>
+                            </motion.div>
+                        )}
+                        
+                        {/* Step 4: Notes */}
                         <motion.div variants={{hidden: {opacity: 0, y: 20}, visible: {opacity: 1, y: 0}}}>
-                            <h3 className="text-2xl mb-3">Krok 3: Dodatkowe uwagi (opcjonalnie)</h3>
+                            <h3 className="text-2xl mb-3">Krok {selectedOption === 'ONLINE' ? '4' : '3'}: Dodatkowe uwagi (opcjonalnie)</h3>
                             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Np. 'Proszę o skupienie się na zadaniach z optymalizacji'..." className="w-full h-32 p-4 rounded-xl bg-slate-800/50 border border-slate-700 font-sans text-base text-white outline-none focus:border-purple-400 transition-colors" />
                         </motion.div>
                     </motion.div>
                     
+                    {/* Summary and payment */}
                     <motion.div initial={isMobile ? {opacity:1, x:0} : {opacity: 0, x: 20}} animate={{opacity: 1, x: 0}} transition={{delay: 0.3}} className="lg:col-span-2 sticky top-24">
                         <div className="p-8 rounded-3xl bg-slate-800/50 border border-purple-500/30 backdrop-blur-lg">
                             <h2 className="text-3xl border-b border-purple-500/20 pb-4 mb-4">Podsumowanie</h2>

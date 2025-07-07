@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     // ==================================================================
     // POPRAWIONA LOGIKA: Odczytujemy dane i tworzymy nową rezerwację
     // ==================================================================
-    const { studentId, appointmentDateTime, subject, type, price, notes } = metadata;
+    const { studentId, appointmentDateTime, subject, type, price, notes, contactInfo } = metadata;
     const adminId = process.env.ADMINID as string;
     
     // Walidacja danych z metadanych
@@ -67,7 +67,8 @@ export async function POST(request: Request) {
           price: parseInt(price),
           notes: notes,
           status: 'UPCOMING',
-          paymentStatus: 'PAID' // Kluczowa zmiana!
+          paymentStatus: 'PAID', // Kluczowa zmiana!
+          contactInfo: contactInfo
         }
       });
       
