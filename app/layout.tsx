@@ -1,47 +1,41 @@
-"use client";
+// app/layout.tsx
 
+import { Metadata } from 'next';
 import { Inter, Chewy } from "next/font/google";
 import "./globals.css";
 import Topbar from "@/components/Topbar/Topbar";
-import Providers from "./providers"; // KROK 1: Importujemy nasz komponent-opakowanie
+import Providers from "./providers";
 import CallNotification from "@/components/Call/CallNotification";
-import { useEffect } from "react";
 
 const chewy = Chewy({subsets: ["latin"], weight: ["400"]});
 
+// 👇 TO JEST TWÓJ NOWY OBIEKT SEO!
+export const metadata: Metadata = {
+  title: {
+    default: 'Korki360 - Korepetycje z Matematyki i INF.02', // Domyślny tytuł strony
+    template: '%s | Korki360', // Szablon dla podstron (np. "Kontakt | Korki360")
+  },
+  description: 'Profesjonalne korepetycje z matematyki na każdym poziomie oraz przygotowanie do egzaminu zawodowego INF.02. Pomoc w zadaniach, przygotowanie do matury i egzaminu ósmoklasisty.',
+  keywords: ['korepetycje', 'matematyka', 'korki', 'korki360', 'inf.02', 'egzamin inf.02', 'matura z matematyki', 'nauczyciel', 'pomoc w nauce', 'inf02', 'informatyka', 'korepetycje matematyka'],
+  authors: [{ name: 'Korki360' }],
+  creator: 'Korki360',
+};
 
 
-
+// W komponencie RootLayout NIE POTRZEBUJESZ JUŻ "use client" ani useEffect
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  useEffect(() => {
-    // Cleanup function that runs when component unmounts
-    return () => {
-        if (process.env.NODE_ENV === 'development') {
-            // Give time for cleanup in StrictMode
-            setTimeout(() => {
-                console.log("StrictMode cleanup completed");
-            }, 100);
-        }
-    };
-}, []);
   return (
     <html lang="pl" className="h-full bg-slate-900">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Chewy&family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
-      </head>
-      {/* POPRAWKA: Usunęliśmy stąd font i gradient, aby były tylko w body */}
+      {/* ⛔️ USUŃ CAŁĄ SEKCJĘ <head> STĄD! Next.js doda ją automatycznie z obiektu metadata. */}
+      
       <body className={`${chewy.className} font-chewy bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900`}>
-        {/* KROK 2: Owijamy całą aplikację w nasz komponent <Providers>,
-            który w środku ma "use client" i <SessionProvider> */}
         <Providers>
           <Topbar />
-          {/* Tag <main> jest ważny dla semantyki i SEO */}
+          {/* Tag <main> jest ważny dla semantyki i SEO - masz go, super! */}
           <main>{children}</main> 
           <CallNotification />
         </Providers>
