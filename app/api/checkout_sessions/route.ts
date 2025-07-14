@@ -5,7 +5,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-05-28.basil'
+  apiVersion: '2025-05-28.basil' // Use a specific API version
 });
 
 export async function POST(request: Request) {
@@ -16,15 +16,21 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
-        const { appointmentDateTime, subject, option, price, notes } = body;
+        const { appointmentDateTime, subject, option, price, notes, contactInfo, address } = body;
 
         if (!appointmentDateTime || !subject || !option || !price) {
             return new NextResponse('Brak wymaganych danych.', { status: 400 });
         }
 
+        if (option.id === 'ONLINE' && !contactInfo) {
+             return new NextResponse('Dla lekcji online, proszę podać dane kontaktowe.', { status: 400 });
+        }
+        if (option.id === 'STUDENT_HOME' && !address) {
+             return new NextResponse('Dla dojazdu do ucznia, proszę podać adres.', { status: 400 });
+        }
+
         const appointmentDate = new Date(appointmentDateTime);
         
-        // Sprawdzamy, czy termin nie jest już zajęty
         const existingAppointment = await prisma.appointment.findFirst({
             where: { date: appointmentDate }
         });
@@ -48,16 +54,15 @@ export async function POST(request: Request) {
                     quantity: 1,
                 },
             ],
-            // ==================================================================
-            // KLUCZOWA ZMIANA: Przekazujemy wszystkie dane do metadanych
-            // ==================================================================
             metadata: {
                 studentId: session.user.id,
                 appointmentDateTime: appointmentDateTime,
                 subject: subject,
                 type: option.id,
-                price: price.toString(),
+                price: (price * 100).toString(), // Pass price in grosze
                 notes: notes || '',
+                contactInfo: contactInfo || '',
+                address: address || '',
             },
             mode: 'payment',
             success_url: `${process.env.NEXT_PUBLIC_APP_URL}/rezerwacja-sukces`,

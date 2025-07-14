@@ -3,7 +3,6 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-// FiShare2 has been added for the new contact input field icon
 import { FiMapPin, FiMonitor, FiHome, FiArrowRight, FiLoader, FiLogIn, FiDivideCircle, FiCode, FiCreditCard, FiShare2 } from 'react-icons/fi';
 import { loadStripe } from '@stripe/stripe-js';
 import { useSession } from 'next-auth/react';
@@ -21,10 +20,6 @@ export default function WybierzTerminPage() {
     const details = params?.details as string;
     const isMobile = useIsMobile();
 
-    // ==================================================================
-    // POPRAWKA BŁĘDU DATY
-    // Ręcznie parsujemy datę, aby uniknąć problemów ze strefami czasowymi
-    // ==================================================================
     const [dateStr, timeStrWithDash] = details ? details.split('_') : [null, null];
     const time = timeStrWithDash ? timeStrWithDash.replace('-', ':') : null;
     
@@ -33,13 +28,12 @@ export default function WybierzTerminPage() {
         const [year, month, day] = dateStr.split('-').map(Number);
         date = new Date(year, month - 1, day);
     }
-    // ==================================================================
 
     const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
     const [selectedOption, setSelectedOption] = useState<OptionType | null>(null);
     const [notes, setNotes] = useState('');
-    // State for the new contact information field
     const [contactInfo, setContactInfo] = useState('');
+    const [address, setAddress] = useState(''); // State for address
     const [formattedDate, setFormattedDate] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isBookingOnSite, setIsBookingOnSite] = useState(false); 
@@ -58,9 +52,13 @@ export default function WybierzTerminPage() {
             return null;
         }
 
-        // Validate contact information if the online option is selected
         if (selectedOption === 'ONLINE' && !contactInfo.trim()) {
             setError("Dla lekcji online, proszę podać dane kontaktowe.");
+            return null;
+        }
+
+        if (selectedOption === 'STUDENT_HOME' && !address.trim()) {
+            setError("Dla dojazdu do ucznia, proszę podać adres.");
             return null;
         }
 
@@ -79,8 +77,8 @@ export default function WybierzTerminPage() {
             },
             price: pricing[selectedOption],
             notes: notes,
-            // Include contactInfo in the booking data if the option is 'ONLINE'
             contactInfo: selectedOption === 'ONLINE' ? contactInfo : undefined,
+            address: selectedOption === 'STUDENT_HOME' ? address : undefined,
         };
     };
 
@@ -151,6 +149,10 @@ export default function WybierzTerminPage() {
     }
 
     const showPayOnSiteButton = session?.user && (selectedOption === 'TEACHER_HOME' || selectedOption === 'STUDENT_HOME');
+    const getNotesStepNumber = () => {
+        if (selectedOption === 'ONLINE' || selectedOption === 'STUDENT_HOME') return 4;
+        return 3;
+    }
 
     return (
         <main className="w-full min-h-screen relative bg-slate-900 text-white font-chewy overflow-hidden">
@@ -218,9 +220,28 @@ export default function WybierzTerminPage() {
                             </motion.div>
                         )}
                         
+                        {/* Step 3: Conditionally rendered address field */}
+                        {selectedOption === 'STUDENT_HOME' && (
+                             <motion.div variants={{hidden: {opacity:0, y:20}, visible: {opacity:1, y:0}}} initial="hidden" animate="visible">
+                                <h3 className="text-2xl mb-4">Krok 3: Gdzie mam dojechać?</h3>
+                                <div className="relative">
+                                    <FiMapPin className="absolute top-1/2 left-5 -translate-y-1/2 text-purple-300/70 text-xl pointer-events-none" />
+                                    <input
+                                        value={address}
+                                        onChange={(e) => {
+                                            setAddress(e.target.value);
+                                            if (error.includes("podać adres")) setError('');
+                                        }}
+                                        placeholder="Podaj dokładny adres"
+                                        className="w-full p-4 pl-14 rounded-xl bg-slate-800/50 border border-slate-700 font-sans text-base text-white outline-none focus:border-purple-400 transition-colors"
+                                    />
+                                </div>
+                            </motion.div>
+                        )}
+                        
                         {/* Step 4: Notes */}
                         <motion.div variants={{hidden: {opacity: 0, y: 20}, visible: {opacity: 1, y: 0}}}>
-                            <h3 className="text-2xl mb-3">Krok {selectedOption === 'ONLINE' ? '4' : '3'}: Dodatkowe uwagi (opcjonalnie)</h3>
+                            <h3 className="text-2xl mb-3">Krok {getNotesStepNumber()}: Dodatkowe uwagi (opcjonalnie)</h3>
                             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Np. 'Proszę o skupienie się na zadaniach z optymalizacji'..." className="w-full h-32 p-4 rounded-xl bg-slate-800/50 border border-slate-700 font-sans text-base text-white outline-none focus:border-purple-400 transition-colors" />
                         </motion.div>
                     </motion.div>

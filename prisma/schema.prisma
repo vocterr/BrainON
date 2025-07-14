@@ -149,6 +149,7 @@ model Appointment {
   notes         String?           // Notatki od ucznia
   contactInfo   String?           // ✅ NOWE POLE: Dane kontaktowe do lekcji online
   paymentStatus String?
+  address       String?
   teacherId     String
   teacher       User              @relation("Teacher", fields: [teacherId], references: [id])
 
