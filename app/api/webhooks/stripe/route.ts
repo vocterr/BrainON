@@ -24,7 +24,6 @@ export async function POST(request: Request) {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
     const metadata = session.metadata;
-
     if (!metadata) {
         console.error('❌ Webhook Error: Missing metadata in session:', session.id);
         return new NextResponse('Brak metadanych w sesji.', { status: 400 });
@@ -56,6 +55,7 @@ export async function POST(request: Request) {
         // powinna być wykonana manualnie lub przez inny system.
         return new NextResponse(null, { status: 200 });
       }
+      const paymentIntentId: string = session.payment_intent!.toString();
 
       await prisma.appointment.create({
         data: {
@@ -68,7 +68,8 @@ export async function POST(request: Request) {
           notes: notes,
           status: 'UPCOMING',
           paymentStatus: 'PAID', // Kluczowa zmiana!
-          contactInfo: contactInfo
+          contactInfo: contactInfo,
+          paymentIntentId
         }
       });
       

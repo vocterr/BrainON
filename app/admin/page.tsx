@@ -4,12 +4,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from "framer-motion";
 import { useSession } from 'next-auth/react';
 import { usePusher } from '@/lib/usePusher';
-// Dodano ikony dla modalu
-import { FiHome, FiLoader, FiMonitor, FiPhone, FiSlash, FiUser, FiWifiOff, FiAlertTriangle, FiPhoneOff, FiMoreVertical, FiX, FiMessageSquare, FiShare2 } from 'react-icons/fi';
+// Dodano ikony dla modalu i przycisków akcji
+import { FiHome, FiLoader, FiMonitor, FiPhone, FiSlash, FiUser, FiWifiOff, FiAlertTriangle, FiPhoneOff, FiMoreVertical, FiX, FiMessageSquare, FiShare2, FiCheckCircle, FiXCircle } from 'react-icons/fi';
 
 // Definicje typów
 interface Student { id: string; name: string | null; email: string | null; }
-type AppointmentStatus = 'UPCOMING' | 'COMPLETED' | 'CANCELLED';
+// Zaktualizowano status zgodnie z prośbą
+type AppointmentStatus = 'UPCOMING' | 'COMPLETED' | 'NOT_COMPLETED';
 type AppointmentType = 'ONLINE' | 'TEACHER_HOME' | 'STUDENT_HOME';
 type Subject = 'MATEMATYKA' | 'INF02';
 
@@ -21,8 +22,8 @@ interface AdminAppointment {
     date: string; 
     type: AppointmentType; 
     status: AppointmentStatus; 
-    notes?: string | null;          // Dodane pole
-    contactInfo?: string | null;    // Dodane pole
+    notes?: string | null;
+    contactInfo?: string | null;
 }
 
 const typeDetails: Record<AppointmentType, { icon: React.ReactElement, text: string }> = { 
@@ -31,7 +32,7 @@ const typeDetails: Record<AppointmentType, { icon: React.ReactElement, text: str
     STUDENT_HOME: { icon: <FiUser />, text: "U ucznia" }, 
 };
 
-// Komponenty pomocnicze skopiowane z `moje-terminy`
+// Komponenty pomocnicze
 const InfoRow = ({ icon, label, value }: { icon: React.ReactElement, label: string, value: string | null | undefined }) => {
     if (!value) return null;
     return (
@@ -71,8 +72,8 @@ export default function AdminPage() {
     const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
-    // Stan do przechowywania wybranej rezerwacji
     const [selectedAppointment, setSelectedAppointment] = useState<AdminAppointment | null>(null);
+    const [isUpdating, setIsUpdating] = useState(false);
 
     useEffect(() => {
         const fetchAppointments = async () => {
@@ -93,7 +94,6 @@ export default function AdminPage() {
     }, [sessionStatus]);
     
     const handleInitiateCall = async (student: Student) => {
-        // ... (bez zmian)
         if (!isUserOnline(student.id)) {
             setCallStatus({ studentId: student.id, status: 'offline' });
             setTimeout(() => setCallStatus(null), 4000);
@@ -115,8 +115,39 @@ export default function AdminPage() {
         }
     };
 
+    // Zaktualizowano typ `newStatus`
+    const handleUpdateStatus = async (appointmentId: string, newStatus: 'COMPLETED' | 'NOT_COMPLETED') => {
+        setIsUpdating(true);
+        try {
+            const res = await fetch('/api/admin', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ appointmentId, status: newStatus }),
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.error || 'Nie udało się zaktualizować statusu.');
+            }
+
+            const updatedAppointment = await res.json();
+
+            setAppointments(prev => 
+                prev.map(app => app.id === appointmentId ? { ...app, status: updatedAppointment.status } : app)
+            );
+
+            setSelectedAppointment(null);
+
+        } catch (err: any) {
+            alert(`Błąd: ${err.message}`);
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
     const { upcomingAppointments, completedAppointments } = useMemo(() => {
         const upcoming = appointments.filter(app => app.status === 'UPCOMING');
+        // Ta logika jest poprawna, bo łapie wszystko co nie jest 'UPCOMING'
         const completed = appointments.filter(app => app.status !== 'UPCOMING');
         return {
             upcomingAppointments: upcoming.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
@@ -134,7 +165,6 @@ export default function AdminPage() {
     }
 
     return (
-        // Dodajemy `overflow-hidden` do głównego kontenera, aby zapobiec podwójnym suwakom
         <div className="w-full min-h-screen bg-slate-900 text-white font-sans overflow-hidden">
             <main className="max-w-7xl mx-auto px-4 py-16 sm:py-24">
                 <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
@@ -153,7 +183,6 @@ export default function AdminPage() {
                             <table className="w-full text-left">
                                 <thead className="border-b border-slate-700 text-sm text-slate-400">
                                     <tr>
-                                        {/* Dodano nową kolumnę na końcu */}
                                         <th className="p-4">Uczeń</th><th className="p-4">Przedmiot</th><th className="p-4">Data i Godzina</th><th className="p-4">Forma</th><th className="p-4">Akcje</th><th className="p-4 text-right">Szczegóły</th>
                                     </tr>
                                 </thead>
@@ -173,7 +202,6 @@ export default function AdminPage() {
                                                     />
                                                 )}
                                             </td>
-                                            {/* Przycisk do otwierania modalu */}
                                             <td className="p-4 text-right">
                                                 <button onClick={() => setSelectedAppointment(app)} className="p-2 rounded-md hover:bg-slate-700 text-slate-400 transition-colors">
                                                     <FiMoreVertical />
@@ -183,12 +211,11 @@ export default function AdminPage() {
                                     )) : ( <tr><td colSpan={6} className="p-8 text-center text-slate-500">Brak terminów w tej kategorii.</td></tr> )}
                                 </tbody>
                             </table>
-                         )}
+                           )}
                     </div>
                 </motion.div>
             </main>
 
-            {/* Boczny panel (modal) ze szczegółami */}
             <AnimatePresence>
                 {selectedAppointment && (
                     <motion.div 
@@ -208,7 +235,6 @@ export default function AdminPage() {
                             <InfoRow icon={<FiHome />} label="Forma" value={typeDetails[selectedAppointment.type].text} />
                         </div>
                         
-                        {/* Sekcja z notatkami */}
                         {selectedAppointment.notes && (
                             <div className="mt-6">
                                 <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><FiMessageSquare />Notatki ucznia:</h3>
@@ -216,11 +242,33 @@ export default function AdminPage() {
                             </div>
                         )}
 
-                        {/* Sekcja z danymi kontaktowymi (dla lekcji online) */}
                         {selectedAppointment.contactInfo && (
                             <div className="mt-6">
                                 <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><FiShare2 />Dane kontaktowe:</h3>
                                 <p className="text-slate-300 bg-slate-700/50 p-4 rounded-lg">{selectedAppointment.contactInfo}</p>
+                            </div>
+                        )}
+
+                        {selectedAppointment.status === 'UPCOMING' && (
+                            <div className="mt-6 pt-6 border-t border-slate-700">
+                                <h3 className="text-lg font-semibold text-white mb-3">Zmień status spotkania</h3>
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <button 
+                                        onClick={() => handleUpdateStatus(selectedAppointment.id, 'COMPLETED')}
+                                        disabled={isUpdating}
+                                        className="flex-1 flex items-center justify-center gap-2 bg-green-500/20 text-green-300 hover:bg-green-500/30 rounded-lg py-2.5 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isUpdating ? <FiLoader className="animate-spin" /> : <><FiCheckCircle /> Ukończono</>}
+                                    </button>
+                                    {/* ZMIANA: Przycisk "Anulowano" na "Nie ukończono" */}
+                                    <button 
+                                        onClick={() => handleUpdateStatus(selectedAppointment.id, 'NOT_COMPLETED')}
+                                        disabled={isUpdating}
+                                        className="flex-1 flex items-center justify-center gap-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg py-2.5 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isUpdating ? <FiLoader className="animate-spin" /> : <><FiXCircle /> Nie ukończono</>}
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </motion.div>

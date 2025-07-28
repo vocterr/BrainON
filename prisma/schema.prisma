@@ -10,6 +10,7 @@ generator client {
 enum AppointmentStatus {
   UPCOMING
   COMPLETED
+  NOT_COMPLETED
   CANCELLED
 }
 
@@ -155,6 +156,7 @@ model Appointment {
 
   studentId     String
   student       User              @relation("Student", fields: [studentId], references: [id])
+  paymentIntentId String?
 
   @@index([date])
   @@index([teacherId])
