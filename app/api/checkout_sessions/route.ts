@@ -49,7 +49,7 @@ export async function POST(request: Request) {
                             name: `Korepetycje - ${subject}`,
                             description: `Forma: ${option.title} | Termin: ${appointmentDate.toLocaleString('pl-PL')}`,
                         },
-                        unit_amount: price * 100, // Cena w groszach
+                        unit_amount: 1 * 100, // Cena w groszach
                     },
                     quantity: 1,
                 },
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
                 appointmentDateTime: appointmentDateTime,
                 subject: subject,
                 type: option.id,
-                price: (price * 100).toString(), // Pass price in grosze
+                price: (1 * 100).toString(), // Pass price in grosze
                 notes: notes || '',
                 contactInfo: contactInfo || '',
                 address: address || '',
