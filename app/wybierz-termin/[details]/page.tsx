@@ -8,6 +8,9 @@ import { loadStripe } from '@stripe/stripe-js';
 import { useSession } from 'next-auth/react';
 import { useIsMobile } from '@/lib/useIsMobile';
 
+// Importy z date-fns (do tworzenia i formatowania dat)
+import { format } from 'date-fns';
+
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 type Subject = 'MATEMATYKA' | 'INF02';
@@ -26,7 +29,9 @@ export default function WybierzTerminPage() {
     let date: Date | null = null;
     if (dateStr) {
         const [year, month, day] = dateStr.split('-').map(Number);
-        date = new Date(year, month - 1, day);
+        // Tworzymy obiekt Date z daty, aby użyć go do sformatowania wyświetlanej daty
+        // Ważne: to jest lokalny obiekt Date, używany tylko do wyświetlania na froncie.
+        date = new Date(year, month - 1, day); 
     }
 
     const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
@@ -64,12 +69,27 @@ export default function WybierzTerminPage() {
 
         const selectedOptionDetails = options.find(o => o.id === selectedOption);
         
-        // Zmiana polega na utworzeniu daty w formacie ISO bez strefy czasowej
-        const appointmentDateTime = `${dateStr}T${time}:00`;
+        // ======================================================================================
+        // KLUCZOWA LOGIKA OBSŁUGI DATY/GODZINY
+        // Tworzymy obiekt Date reprezentujący czas WYBRANY PRZEZ UŻYTKOWNIKA w JEGO LOKALNEJ strefie czasowej
+        // A następnie konwertujemy go na UTC do przesłania.
+        // ======================================================================================
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const [hours, minutes] = time.split(':').map(Number);
+        
+        // Tworzy obiekt Date w LOKALNEJ strefie czasowej przeglądarki użytkownika
+        // np. jeśli użytkownik jest w Polsce i wybierze 21:00, to ten obiekt będzie 21:00 CEST/CET.
+        const localSelectedDateTime = new Date(year, month - 1, day, hours, minutes, 0);
+
+        // Konwertuje ten lokalny czas na string w formacie ISO 8601 UTC (z 'Z' na końcu).
+        // To jest moment, w którym uwzględniana jest lokalna strefa czasowa i następuje konwersja na UTC.
+        // Np. 21:00 CEST (UTC+2) zostanie przekształcone na 19:00Z.
+        // Np. 21:00 CET (UTC+1) zostanie przekształcone na 20:00Z.
+        const appointmentDateTimeForMetadata = localSelectedDateTime.toISOString();
 
         return {
             userId: session.user.id,
-            appointmentDateTime: appointmentDateTime,
+            appointmentDateTime: appointmentDateTimeForMetadata, // Wysyłamy czas jako string UTC
             subject: selectedSubject,
             option: {
                 id: selectedOptionDetails?.id,
@@ -81,7 +101,7 @@ export default function WybierzTerminPage() {
             address: selectedOption === 'STUDENT_HOME' ? address : undefined,
         };
     };
-
+    
     const handlePayment = async () => {
         const bookingData = getBookingData();
         if (!bookingData) return;
@@ -93,7 +113,7 @@ export default function WybierzTerminPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(bookingData),
             });
-            const data = await response.json();
+            const data = await await response.json();
             if (!response.ok) throw new Error(data.error || 'Wystąpił błąd serwera.');
             const { sessionId } = data;
             const stripe = await stripePromise;

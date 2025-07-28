@@ -93,7 +93,7 @@ export default function Topbar() {
                     animate={{ y: isDesktop && !isVisible ? -100 : 0 }}
                     transition={{ duration: 0.35, ease: "easeInOut" }}
                     // OPTYMALIZACJA: Klasa tła jest nadawana na podstawie `scrolled` (desktop) lub na stałe (mobile)
-                    className={`fixed z-[9999] flex items-center justify-center top-0 left-0 w-full h-20 font-chewy transition-all duration-300 ${scrolled || !isDesktop
+                    className={`fixed z-[90] flex items-center justify-center top-0 left-0 w-full h-20 font-chewy transition-all duration-300 ${scrolled || !isDesktop
                         ? 'bg-slate-900/60 backdrop-blur-lg'
                         : 'bg-transparent'
                         }`}
