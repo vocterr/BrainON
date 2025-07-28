@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     }
 
     // ==================================================================
-    // POPRAWIONA LOGIKA: Odczytujemy dane i tworzymy nową rezerwację
+    // POPRAWIONA LOGIKA: Odczytujemy dane i tworzymy nową rezerwacjęe
     // ==================================================================
     const { studentId, appointmentDateTime, subject, type, price, notes, contactInfo } = metadata;
     const adminId = process.env.ADMINID as string;
