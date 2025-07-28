@@ -2,10 +2,9 @@
 
 import React, { Dispatch, SetStateAction, useEffect } from 'react';
 import { motion, AnimatePresence } from "framer-motion";
-import { FiBookOpen, FiCode, FiMail, FiUser, FiArrowRight, FiLogIn, FiLogOut, FiLoader } from 'react-icons/fi';
+import { FiBookOpen, FiCode, FiMail, FiUser, FiArrowRight, FiLogIn, FiLogOut, FiLoader, FiCalendar } from 'react-icons/fi'; // Dodano FiCalendar
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-// KROK 1: Zaimportuj hook, który stworzyliśmy wcześniej
 import { useIsMobile } from '@/lib/useIsMobile';
 
 export const MenuTopbar = ({ isMenuClicked, setIsMenuClicked }: { 
@@ -15,7 +14,6 @@ export const MenuTopbar = ({ isMenuClicked, setIsMenuClicked }: {
     
     const { data: session, status } = useSession();
     const router = useRouter();
-    // KROK 2: Użyj hooka w komponencie
     const isMobile = useIsMobile();
 
     useEffect(() => {
@@ -41,21 +39,17 @@ export const MenuTopbar = ({ isMenuClicked, setIsMenuClicked }: {
         { name: "Kontakt", route: "/kontakt", icon: FiMail, color: "from-purple-700 to-slate-700" }
     ];
 
-    // KROK 3: Zmodyfikuj warianty animacji, aby były zależne od `isMobile`
     const containerVariants = {
         hidden: { opacity: 0 },
         visible: {
             opacity: 1,
             transition: {
-                // Wyłącz animację "schodkową" na telefonach dla natychmiastowego efektu
                 staggerChildren: isMobile ? 0 : 0.08,
             }
         }
     };
 
     const itemVariants = {
-        // Na telefonie elementy startują od razu widoczne i na swoim miejscu (opacity: 1, x: 0)
-        // Na desktopie animują się z lewej strony (opacity: 0, x: -40)
         hidden: isMobile ? { opacity: 1, x: 0 } : { opacity: 0, x: -40 },
         visible: { opacity: 1, x: 0 }
     };
@@ -77,21 +71,21 @@ export const MenuTopbar = ({ isMenuClicked, setIsMenuClicked }: {
                         </div>
 
                         <motion.div 
-                            // KROK 4: Przekaż zmodyfikowane warianty do komponentów motion
                             variants={containerVariants}
                             initial="hidden"
                             animate="visible"
                             exit="hidden"
-                            className="relative z-10 flex flex-col items-center gap-4"
+                            // Dodane style dla lepszego wyglądu na urządzeniach mobilnych
+                            className="relative z-10 flex flex-col items-center gap-3 md:gap-4 max-h-[85vh] overflow-y-auto px-2 py-4 no-scrollbar" // Ograniczenie wysokości i przewijanie
                         >
-                            <motion.div variants={itemVariants} onClick={() => handleNavigation("/")} className="text-center cursor-pointer">
-                                <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600 text-5xl">
+                            <motion.div variants={itemVariants} onClick={() => handleNavigation("/")} className="text-center cursor-pointer mb-2"> {/* Delikatne zmniejszenie marginesu */}
+                                <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600 text-4xl md:text-5xl"> {/* Zmniejszenie rozmiaru czcionki na mobile */}
                                     korki360.<b className="bg-gradient-to-r from-amber-600 to-lime-600 bg-clip-text text-transparent ">pl</b>
                                 </span>
-                                <p className="font-sans text-purple-200/70 mt-2">Nawiguj do sukcesu</p>
+                                <p className="font-sans text-purple-200/70 mt-1 text-sm md:text-base">Nawiguj do sukcesu</p> {/* Zmniejszenie rozmiaru czcionki na mobile */}
                             </motion.div>
 
-                            <div className="flex flex-col space-y-3">
+                            <div className="flex flex-col space-y-2 md:space-y-3"> {/* Zmniejszenie odstępu */}
                                 {menuItems.map((item) => (
                                     <motion.div
                                         key={item.name}
@@ -101,13 +95,13 @@ export const MenuTopbar = ({ isMenuClicked, setIsMenuClicked }: {
                                         className="relative"
                                     >
                                         <button
-                                            className={`relative overflow-hidden text-white text-xl py-5 px-8 rounded-2xl bg-gradient-to-r ${item.color} backdrop-blur-sm border border-white/20 hover:border-white/40 transition-all duration-300 flex items-center space-x-4 min-w-[280px] justify-start shadow-2xl group`}
+                                            className={`relative overflow-hidden text-white text-lg md:text-xl py-4 px-6 md:py-5 md:px-8 rounded-2xl bg-gradient-to-r ${item.color} backdrop-blur-sm border border-white/20 hover:border-white/40 transition-all duration-300 flex items-center space-x-3 md:space-x-4 min-w-[250px] md:min-w-[280px] justify-start shadow-2xl group`} // Zmniejszenie paddingu i min-width
                                             onClick={() => handleNavigation(item.route)}
                                         >
                                             <div className="absolute -top-2.5 -right-2.5 w-7 h-7 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full shadow-lg flex items-center justify-center"><div className="w-2.5 h-2.5 bg-white/30 rounded-full"></div></div>
                                             <div className="absolute top-0 right-0 w-5 h-5 bg-black/10 transform rotate-45 translate-x-2.5 -translate-y-2.5"></div>
-                                            <div className="bg-white/10 p-3 rounded-full backdrop-blur-sm group-hover:bg-white/20 transition-all duration-300">
-                                                <item.icon size={24} />
+                                            <div className="bg-white/10 p-2.5 md:p-3 rounded-full backdrop-blur-sm group-hover:bg-white/20 transition-all duration-300"> {/* Zmniejszenie paddingu ikony */}
+                                                <item.icon size={20} /> {/* Zmniejszenie rozmiaru ikony */}
                                             </div>
                                             <span className="tracking-wide">{item.name}</span>
                                         </button>
@@ -115,34 +109,45 @@ export const MenuTopbar = ({ isMenuClicked, setIsMenuClicked }: {
                                 ))}
                             </div>
                             
-                            <motion.div variants={itemVariants} className="w-full max-w-[280px] mt-4 flex flex-col gap-3">
+                            <motion.div variants={itemVariants} className="w-full max-w-[250px] md:max-w-[280px] mt-3 md:mt-4 flex flex-col gap-2 md:gap-3"> {/* Zmniejszenie max-width i gap */}
                                 <button
                                     onClick={() => handleNavigation('/zacznij-teraz')}
-                                    className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-yellow-400 via-orange-500 to-orange-600 text-white shadow-lg text-lg font-sans hover:scale-105 transition-transform"
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 md:px-5 md:py-3 rounded-xl bg-gradient-to-r from-yellow-400 via-orange-500 to-orange-600 text-white shadow-lg text-base md:text-lg font-sans hover:scale-105 transition-transform" // Zmniejszenie paddingu i rozmiaru czcionki
                                 >
                                     <span>Zacznij Teraz</span>
                                     <FiArrowRight />
                                 </button>
                                 
-                                {status === 'loading' && ( <div className="w-full flex items-center justify-center p-3 rounded-xl bg-slate-700/50"><FiLoader className="animate-spin text-slate-400" /></div> )}
+                                {status === 'loading' && ( <div className="w-full flex items-center justify-center p-2.5 md:p-3 rounded-xl bg-slate-700/50"><FiLoader className="animate-spin text-slate-400 text-lg md:text-xl" /></div> )} {/* Zmniejszenie paddingu i rozmiaru ikony */}
                                 
+                                {status === 'authenticated' && (
+                                    // Nowy przycisk "Moje Terminy"
+                                    <button
+                                        onClick={() => handleNavigation('/moje-terminy')}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 md:px-5 md:py-3 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg text-base md:text-lg font-sans hover:scale-105 transition-transform"
+                                    >
+                                        <FiCalendar />
+                                        <span>Moje Terminy</span>
+                                    </button>
+                                )}
+
                                 {status === 'unauthenticated' && (
-                                    <button onClick={() => handleNavigation('/login')} className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-slate-700/50 border border-slate-600 text-white text-lg font-sans hover:bg-slate-700 transition-colors">
+                                    <button onClick={() => handleNavigation('/login')} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 md:px-5 md:py-3 rounded-xl bg-slate-700/50 border border-slate-600 text-white text-base md:text-lg font-sans hover:bg-slate-700 transition-colors"> {/* Zmniejszenie paddingu i rozmiaru czcionki */}
                                         <FiLogIn />
                                         <span>Zaloguj się</span>
                                     </button>
                                 )}
 
                                 {status === 'authenticated' && (
-                                    <button onClick={() => { signOut(); setIsMenuClicked(false); }} className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-lg font-sans hover:bg-red-500/30 transition-colors">
+                                    <button onClick={() => { signOut(); setIsMenuClicked(false); }} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 md:px-5 md:py-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-base md:text-lg font-sans hover:bg-red-500/30 transition-colors"> {/* Zmniejszenie paddingu i rozmiaru czcionki */}
                                         <FiLogOut />
                                         <span>Wyloguj się</span>
                                     </button>
                                 )}
                             </motion.div>
                             
-                            <motion.div variants={itemVariants}>
-                                <button onClick={() => setIsMenuClicked(false)} className='w-full text-center pb-4 font-sans text-purple-300/80 hover:text-white transition-colors'>
+                            <motion.div variants={itemVariants} className="mt-auto"> {/* Użycie mt-auto aby "Zamknij" było na dole */}
+                                <button onClick={() => setIsMenuClicked(false)} className='w-full text-center pb-2 pt-2 md:pb-4 md:pt-4 font-sans text-purple-300/80 hover:text-white transition-colors text-sm md:text-base'> {/* Zmniejszenie paddingu i rozmiaru czcionki */}
                                     Zamknij
                                 </button>
                             </motion.div>

@@ -3,18 +3,18 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FiMapPin, FiMonitor, FiHome, FiArrowRight, FiLoader, FiLogIn, FiDivideCircle, FiCode, FiCreditCard, FiShare2 } from 'react-icons/fi';
-import { loadStripe } from '@stripe/stripe-js';
+import { FiMapPin, FiMonitor, FiHome, FiArrowRight, FiLoader, FiLogIn, FiDivideCircle, FiCode, FiCreditCard, FiShare2, FiFacebook, FiMessageCircle, FiPhone } from 'react-icons/fi'; // Dodano nowe ikony
 import { useSession } from 'next-auth/react';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { loadStripe } from '@stripe/stripe-js';
+import { FaDiscord } from 'react-icons/fa';
 
-// Importy z date-fns (do tworzenia i formatowania dat)
-import { format } from 'date-fns';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 type Subject = 'MATEMATYKA' | 'INF02';
 type OptionType = 'ONLINE' | 'TEACHER_HOME' | 'STUDENT_HOME';
+type ContactMethod = 'DISCORD' | 'MESSENGER' | 'WHATSAPP' | 'OTHER'; // Dodano typy metod kontaktu
 
 export default function WybierzTerminPage() {
     const router = useRouter();
@@ -29,15 +29,14 @@ export default function WybierzTerminPage() {
     let date: Date | null = null;
     if (dateStr) {
         const [year, month, day] = dateStr.split('-').map(Number);
-        // Tworzymy obiekt Date z daty, aby użyć go do sformatowania wyświetlanej daty
-        // Ważne: to jest lokalny obiekt Date, używany tylko do wyświetlania na froncie.
         date = new Date(year, month - 1, day); 
     }
 
     const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
     const [selectedOption, setSelectedOption] = useState<OptionType | null>(null);
     const [notes, setNotes] = useState('');
-    const [contactInfo, setContactInfo] = useState('');
+    const [selectedContactMethod, setSelectedContactMethod] = useState<ContactMethod | null>(null); // Nowy stan
+    const [contactDetails, setContactDetails] = useState(''); // Zmieniono z contactInfo na contactDetails
     const [address, setAddress] = useState('');
     const [formattedDate, setFormattedDate] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -51,15 +50,27 @@ export default function WybierzTerminPage() {
         }
     }, [date]);
     
+    // Resetuj stan danych kontaktowych, gdy zmienia się wybrana opcja
+    useEffect(() => {
+        setSelectedContactMethod(null);
+        setContactDetails('');
+    }, [selectedOption]);
+
     const getBookingData = () => {
         if (!selectedOption || !selectedSubject || !session?.user?.id || !dateStr || !time) {
             setError("Proszę wybrać przedmiot i formę zajęć.");
             return null;
         }
 
-        if (selectedOption === 'ONLINE' && !contactInfo.trim()) {
-            setError("Dla lekcji online, proszę podać dane kontaktowe.");
-            return null;
+        if (selectedOption === 'ONLINE') {
+            if (!selectedContactMethod) {
+                setError("Proszę wybrać metodę kontaktu dla lekcji online.");
+                return null;
+            }
+            if (!contactDetails.trim()) {
+                setError("Proszę podać swoje dane kontaktowe dla wybranej metody.");
+                return null;
+            }
         }
 
         if (selectedOption === 'STUDENT_HOME' && !address.trim()) {
@@ -69,27 +80,15 @@ export default function WybierzTerminPage() {
 
         const selectedOptionDetails = options.find(o => o.id === selectedOption);
         
-        // ======================================================================================
-        // KLUCZOWA LOGIKA OBSŁUGI DATY/GODZINY
-        // Tworzymy obiekt Date reprezentujący czas WYBRANY PRZEZ UŻYTKOWNIKA w JEGO LOKALNEJ strefie czasowej
-        // A następnie konwertujemy go na UTC do przesłania.
-        // ======================================================================================
         const [year, month, day] = dateStr.split('-').map(Number);
         const [hours, minutes] = time.split(':').map(Number);
         
-        // Tworzy obiekt Date w LOKALNEJ strefie czasowej przeglądarki użytkownika
-        // np. jeśli użytkownik jest w Polsce i wybierze 21:00, to ten obiekt będzie 21:00 CEST/CET.
         const localSelectedDateTime = new Date(year, month - 1, day, hours, minutes, 0);
-
-        // Konwertuje ten lokalny czas na string w formacie ISO 8601 UTC (z 'Z' na końcu).
-        // To jest moment, w którym uwzględniana jest lokalna strefa czasowa i następuje konwersja na UTC.
-        // Np. 21:00 CEST (UTC+2) zostanie przekształcone na 19:00Z.
-        // Np. 21:00 CET (UTC+1) zostanie przekształcone na 20:00Z.
         const appointmentDateTimeForMetadata = localSelectedDateTime.toISOString();
 
         return {
             userId: session.user.id,
-            appointmentDateTime: appointmentDateTimeForMetadata, // Wysyłamy czas jako string UTC
+            appointmentDateTime: appointmentDateTimeForMetadata, 
             subject: selectedSubject,
             option: {
                 id: selectedOptionDetails?.id,
@@ -97,7 +96,11 @@ export default function WybierzTerminPage() {
             },
             price: pricing[selectedOption],
             notes: notes,
-            contactInfo: selectedOption === 'ONLINE' ? contactInfo : undefined,
+            // Nowa struktura danych kontaktowych
+            contactInfo: selectedOption === 'ONLINE' ? { 
+                method: selectedContactMethod, 
+                details: contactDetails 
+            } : undefined,
             address: selectedOption === 'STUDENT_HOME' ? address : undefined,
         };
     };
@@ -158,6 +161,13 @@ export default function WybierzTerminPage() {
         { id: 'TEACHER_HOME' as OptionType, icon: <FiHome />, title: 'U mnie w domu', description: 'Zapraszam do mojego miejsca pracy.', price: pricing.TEACHER_HOME },
         { id: 'STUDENT_HOME' as OptionType, icon: <FiMapPin />, title: 'Dojazd do ucznia', description: 'Na terenie powiatu kazimierskiego.', price: pricing.STUDENT_HOME },
     ];
+
+    const contactMethods = [
+        { id: 'DISCORD' as ContactMethod, icon: <FaDiscord />, title: 'Discord', placeholder: 'Twój nick Discord (np. jannowak#1234)', teacherExample: 'Mój nick: vocter_' },
+        { id: 'MESSENGER' as ContactMethod, icon: <FiFacebook />, title: 'Messenger', placeholder: 'Link do Twojego profilu na FB lub pełne imię i nazwisko', teacherExample: 'Mój profil na FB: facebook.com/profile.php?id=100082308681935' },
+        { id: 'WHATSAPP' as ContactMethod, icon: <FiPhone />, title: 'WhatsApp / Telefon', placeholder: 'Twój numer telefonu (np. +48 xxx xxx xxx)', teacherExample: 'Mój numer: +48 577 869 950' },
+        { id: 'OTHER' as ContactMethod, icon: <FiShare2 />, title: 'Inna metoda', placeholder: 'Podaj wybraną metodę i swoje dane kontaktowe', teacherExample: 'Np. Google Meet: vocterr07@gmail.com' },
+    ];
     
     if (!date || !time || !details) {
         return (
@@ -173,6 +183,8 @@ export default function WybierzTerminPage() {
         if (selectedOption === 'ONLINE' || selectedOption === 'STUDENT_HOME') return 4;
         return 3;
     }
+
+    const currentContactMethod = contactMethods.find(m => m.id === selectedContactMethod);
 
     return (
         <main className="w-full min-h-screen relative bg-slate-900 text-white font-chewy overflow-hidden">
@@ -221,26 +233,47 @@ export default function WybierzTerminPage() {
                             ))}
                         </motion.div>
                         
-                        {/* Step 3: Conditionally rendered contact info field */}
+                        {/* Step 3: Conditionally rendered contact info field for ONLINE */}
                         {selectedOption === 'ONLINE' && (
                              <motion.div variants={{hidden: {opacity:0, y:20}, visible: {opacity:1, y:0}}} initial="hidden" animate="visible">
                                  <h3 className="text-2xl mb-4">Krok 3: Jak się skontaktujemy?</h3>
-                                 <div className="relative">
-                                     <FiShare2 className="absolute top-1/2 left-5 -translate-y-1/2 text-purple-300/70 text-xl pointer-events-none" />
-                                     <input
-                                         value={contactInfo}
-                                         onChange={(e) => {
-                                             setContactInfo(e.target.value);
-                                             if (error.includes("dane kontaktowe")) setError('');
-                                         }}
-                                         placeholder="Podaj nazwę Discord, Messenger, nr tel..."
-                                         className="w-full p-4 pl-14 rounded-xl bg-slate-800/50 border border-slate-700 font-sans text-base text-white outline-none focus:border-purple-400 transition-colors"
-                                     />
+                                 <div className="grid sm:grid-cols-2 gap-4 mb-4">
+                                     {contactMethods.map(method => (
+                                         <div key={method.id} onClick={() => {
+                                             setSelectedContactMethod(method.id);
+                                             setError(''); // Clear error when method is selected
+                                         }} className={`p-4 rounded-xl bg-slate-800/50 border-2 backdrop-blur-sm cursor-pointer transition-all duration-300 ${selectedContactMethod === method.id ? 'border-blue-500' : 'border-slate-700 hover:border-slate-600'}`}>
+                                             <div className="flex items-center gap-3">
+                                                 <div className={`p-2 rounded-lg bg-slate-700 text-blue-300 text-xl`}>{method.icon}</div>
+                                                 <span className="text-xl text-white">{method.title}</span>
+                                             </div>
+                                         </div>
+                                     ))}
                                  </div>
+
+                                 {selectedContactMethod && (
+                                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+                                         <h4 className="text-xl mb-2 text-purple-200/90">Twoje dane kontaktowe ({currentContactMethod?.title}):</h4>
+                                         <div className="relative mb-2">
+                                             <input
+                                                 value={contactDetails}
+                                                 onChange={(e) => {
+                                                     setContactDetails(e.target.value);
+                                                     if (error.includes("dane kontaktowe")) setError('');
+                                                 }}
+                                                 placeholder={currentContactMethod?.placeholder}
+                                                 className="w-full p-4 pl-5 pr-5 rounded-xl bg-slate-800/50 border border-slate-700 font-sans text-base text-white outline-none focus:border-blue-400 transition-colors"
+                                             />
+                                         </div>
+                                         <p className="font-sans text-sm text-purple-200/70">
+                                            Np. {currentContactMethod?.teacherExample}
+                                         </p>
+                                     </motion.div>
+                                 )}
                              </motion.div>
                         )}
                         
-                        {/* Step 3: Conditionally rendered address field */}
+                        {/* Step 3: Conditionally rendered address field for STUDENT_HOME */}
                         {selectedOption === 'STUDENT_HOME' && (
                              <motion.div variants={{hidden: {opacity:0, y:20}, visible: {opacity:1, y:0}}} initial="hidden" animate="visible">
                                  <h3 className="text-2xl mb-4">Krok 3: Gdzie mam dojechać?</h3>
@@ -260,7 +293,7 @@ export default function WybierzTerminPage() {
                         )}
                         
                         {/* Step 4: Notes */}
-                        <motion.div variants={{hidden: {opacity: 0, y: 20}, visible: {opacity: 1, y: 0}}}>
+                        <motion.div variants={{hidden: {opacity: 0, y: 20}, visible: {opacity: 1, y: 0}}} initial="hidden" animate="visible">
                             <h3 className="text-2xl mb-3">Krok {getNotesStepNumber()}: Dodatkowe uwagi (opcjonalnie)</h3>
                             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Np. 'Proszę o skupienie się na zadaniach z optymalizacji'..." className="w-full h-32 p-4 rounded-xl bg-slate-800/50 border border-slate-700 font-sans text-base text-white outline-none focus:border-purple-400 transition-colors" />
                         </motion.div>
@@ -277,6 +310,20 @@ export default function WybierzTerminPage() {
                                 </div>
                                 {selectedSubject && (<div className="flex justify-between items-center"><span className="text-purple-200/80">Przedmiot:</span><span className="text-white">{subjects.find(s => s.id === selectedSubject)?.title}</span></div>)}
                                 {selectedOption && ( <div className="flex justify-between items-center"><span className="text-purple-200/80">Forma zajęć:</span><span className="text-white">{options.find(o => o.id === selectedOption)?.title}</span></div>)}
+                                {selectedOption === 'ONLINE' && selectedContactMethod && contactDetails && (
+                                     <div className="flex justify-between items-center text-sm">
+                                         <span className="text-purple-200/80">Kontakt:</span>
+                                         <span className="text-white text-right">
+                                             {currentContactMethod?.title}: {contactDetails}
+                                         </span>
+                                     </div>
+                                )}
+                                {selectedOption === 'STUDENT_HOME' && address && (
+                                     <div className="flex justify-between items-center text-sm">
+                                         <span className="text-purple-200/80">Adres:</span>
+                                         <span className="text-white text-right">{address}</span>
+                                     </div>
+                                )}
                                 <div className="border-t border-purple-500/20 my-4"></div>
                                 <div className="flex justify-between text-2xl font-bold">
                                     <span className="text-purple-200/80">Do zapłaty:</span>

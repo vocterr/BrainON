@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useSession } from 'next-auth/react';
 import { usePusher } from '@/lib/usePusher';
 // Dodano ikony dla modalu i przycisków akcji
-import { FiHome, FiLoader, FiMonitor, FiPhone, FiSlash, FiUser, FiWifiOff, FiAlertTriangle, FiPhoneOff, FiMoreVertical, FiX, FiMessageSquare, FiShare2, FiCheckCircle, FiXCircle } from 'react-icons/fi';
+import { FiHome, FiLoader, FiMonitor, FiPhone, FiSlash, FiUser, FiWifiOff, FiAlertTriangle, FiPhoneOff, FiMoreVertical, FiX, FiMessageSquare, FiShare2, FiCheckCircle, FiXCircle, FiFacebook, FiPhoneCall, FiLink } from 'react-icons/fi'; // Dodano FiPhoneCall i FiLink
+import { FaDiscord } from 'react-icons/fa';
 
 // Definicje typów
 interface Student { id: string; name: string | null; email: string | null; }
@@ -13,8 +14,9 @@ interface Student { id: string; name: string | null; email: string | null; }
 type AppointmentStatus = 'UPCOMING' | 'COMPLETED' | 'NOT_COMPLETED';
 type AppointmentType = 'ONLINE' | 'TEACHER_HOME' | 'STUDENT_HOME';
 type Subject = 'MATEMATYKA' | 'INF02';
+type ContactMethod = 'DISCORD' | 'MESSENGER' | 'WHATSAPP' | 'OTHER';
 
-// Zaktualizowany typ AdminAppointment
+// Zaktualizowany typ AdminAppointment - ZMIANA TUTAJ
 interface AdminAppointment { 
     id: string; 
     student: Student; 
@@ -23,13 +25,24 @@ interface AdminAppointment {
     type: AppointmentType; 
     status: AppointmentStatus; 
     notes?: string | null;
-    contactInfo?: string | null;
+    contactInfo?: { // Zaktualizowany typ contactInfo
+        method: ContactMethod;
+        details: string;
+    } | null;
 }
 
 const typeDetails: Record<AppointmentType, { icon: React.ReactElement, text: string }> = { 
     ONLINE: { icon: <FiMonitor />, text: "Online" }, 
     TEACHER_HOME: { icon: <FiHome />, text: "U nauczyciela" }, 
     STUDENT_HOME: { icon: <FiUser />, text: "U ucznia" }, 
+};
+
+// Nowe mapowanie dla metod kontaktu - ZMIANA TUTAJ
+const contactMethodDetails: Record<ContactMethod, { icon: React.ReactElement, text: string }> = {
+    DISCORD: { icon: <FaDiscord />, text: "Discord" },
+    MESSENGER: { icon: <FiFacebook />, text: "Messenger (Facebook)" },
+    WHATSAPP: { icon: <FiPhoneCall />, text: "WhatsApp / Telefon" },
+    OTHER: { icon: <FiShare2 />, text: "Inna" },
 };
 
 // Komponenty pomocnicze
@@ -115,7 +128,6 @@ export default function AdminPage() {
         }
     };
 
-    // Zaktualizowano typ `newStatus`
     const handleUpdateStatus = async (appointmentId: string, newStatus: 'COMPLETED' | 'NOT_COMPLETED') => {
         setIsUpdating(true);
         try {
@@ -147,7 +159,6 @@ export default function AdminPage() {
 
     const { upcomingAppointments, completedAppointments } = useMemo(() => {
         const upcoming = appointments.filter(app => app.status === 'UPCOMING');
-        // Ta logika jest poprawna, bo łapie wszystko co nie jest 'UPCOMING'
         const completed = appointments.filter(app => app.status !== 'UPCOMING');
         return {
             upcomingAppointments: upcoming.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
@@ -164,6 +175,16 @@ export default function AdminPage() {
         return <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white"><FiSlash className="h-24 w-24 text-red-500 mb-4" /><h1>Brak dostępu</h1></div>;
     }
 
+    // Funkcja pomocnicza do sprawdzania, czy string to URL
+    const isValidUrl = (str: string) => {
+        try {
+            new URL(str);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    };
+
     return (
         <div className="w-full min-h-screen bg-slate-900 text-white font-sans overflow-hidden">
             <main className="max-w-7xl mx-auto px-4 py-16 sm:py-24">
@@ -178,40 +199,40 @@ export default function AdminPage() {
                     </div>
                     <div className="overflow-x-auto">
                         {isLoading ? ( <div className="p-8 text-center"><FiLoader className="animate-spin h-8 w-8 mx-auto text-slate-500" /></div> ) : 
-                         error ? ( <div className="p-8 text-center text-red-400"><FiAlertTriangle /><span>{error}</span></div> ) : 
-                         (
-                            <table className="w-full text-left">
-                                <thead className="border-b border-slate-700 text-sm text-slate-400">
-                                    <tr>
-                                        <th className="p-4">Uczeń</th><th className="p-4">Przedmiot</th><th className="p-4">Data i Godzina</th><th className="p-4">Forma</th><th className="p-4">Akcje</th><th className="p-4 text-right">Szczegóły</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {displayedAppointments.length > 0 ? displayedAppointments.map((app) => (
-                                        <tr key={app.id} className="border-b border-slate-800">
-                                            <td className="p-4"><div>{app.student.name}</div><div className="text-xs text-slate-400">{app.student.email}</div></td>
-                                            <td className="p-4">{app.subject}</td>
-                                            <td className="p-4">{new Date(app.date).toLocaleString('pl-PL', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' })}</td>
-                                            <td className="p-4"><div className="flex items-center gap-2 text-sm">{typeDetails[app.type].icon}<span>{typeDetails[app.type].text}</span></div></td>
-                                            <td className="p-4">
-                                                {activeTab === 'upcoming' && app.type === 'ONLINE' && (
-                                                    <CallButton
-                                                        status={callStatus?.studentId === app.student.id ? callStatus.status : null}
-                                                        isOnline={isUserOnline(app.student.id)}
-                                                        onClick={() => handleInitiateCall(app.student)}
-                                                    />
-                                                )}
-                                            </td>
-                                            <td className="p-4 text-right">
-                                                <button onClick={() => setSelectedAppointment(app)} className="p-2 rounded-md hover:bg-slate-700 text-slate-400 transition-colors">
-                                                    <FiMoreVertical />
-                                                </button>
-                                            </td>
+                            error ? ( <div className="p-8 text-center text-red-400"><FiAlertTriangle /><span>{error}</span></div> ) : 
+                            (
+                                <table className="w-full text-left">
+                                    <thead className="border-b border-slate-700 text-sm text-slate-400">
+                                        <tr>
+                                            <th className="p-4">Uczeń</th><th className="p-4">Przedmiot</th><th className="p-4">Data i Godzina</th><th className="p-4">Forma</th><th className="p-4">Akcje</th><th className="p-4 text-right">Szczegóły</th>
                                         </tr>
-                                    )) : ( <tr><td colSpan={6} className="p-8 text-center text-slate-500">Brak terminów w tej kategorii.</td></tr> )}
-                                </tbody>
-                            </table>
-                           )}
+                                    </thead>
+                                    <tbody>
+                                        {displayedAppointments.length > 0 ? displayedAppointments.map((app) => (
+                                            <tr key={app.id} className="border-b border-slate-800">
+                                                <td className="p-4"><div>{app.student.name}</div><div className="text-xs text-slate-400">{app.student.email}</div></td>
+                                                <td className="p-4">{app.subject}</td>
+                                                <td className="p-4">{new Date(app.date).toLocaleString('pl-PL', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' })}</td>
+                                                <td className="p-4"><div className="flex items-center gap-2 text-sm">{typeDetails[app.type].icon}<span>{typeDetails[app.type].text}</span></div></td>
+                                                <td className="p-4">
+                                                    {activeTab === 'upcoming' && app.type === 'ONLINE' && (
+                                                        <CallButton
+                                                            status={callStatus?.studentId === app.student.id ? callStatus.status : null}
+                                                            isOnline={isUserOnline(app.student.id)}
+                                                            onClick={() => handleInitiateCall(app.student)}
+                                                        />
+                                                    )}
+                                                </td>
+                                                <td className="p-4 text-right">
+                                                    <button onClick={() => setSelectedAppointment(app)} className="p-2 rounded-md hover:bg-slate-700 text-slate-400 transition-colors">
+                                                        <FiMoreVertical />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        )) : ( <tr><td colSpan={6} className="p-8 text-center text-slate-500">Brak terminów w tej kategorii.</td></tr> )}
+                                    </tbody>
+                                </table>
+                            )}
                     </div>
                 </motion.div>
             </main>
@@ -242,10 +263,30 @@ export default function AdminPage() {
                             </div>
                         )}
 
+                        {/* ZMIANA: Obsługa wyświetlania contactInfo */}
                         {selectedAppointment.contactInfo && (
                             <div className="mt-6">
                                 <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><FiShare2 />Dane kontaktowe:</h3>
-                                <p className="text-slate-300 bg-slate-700/50 p-4 rounded-lg">{selectedAppointment.contactInfo}</p>
+                                <div className="bg-slate-700/50 p-4 rounded-lg flex items-center gap-3">
+                                    {contactMethodDetails[selectedAppointment.contactInfo.method]?.icon}
+                                    <div className="flex-1">
+                                        <p className="text-slate-300 text-sm font-semibold">
+                                            {contactMethodDetails[selectedAppointment.contactInfo.method]?.text || 'Nieznana metoda'}
+                                        </p>
+                                        {isValidUrl(selectedAppointment.contactInfo.details) ? (
+                                            <a 
+                                                href={selectedAppointment.contactInfo.details.startsWith('http') ? selectedAppointment.contactInfo.details : `https://${selectedAppointment.contactInfo.details}`} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer" 
+                                                className="text-blue-400 hover:underline flex items-center gap-1 text-sm break-all"
+                                            >
+                                                {selectedAppointment.contactInfo.details} <FiLink className="text-xs" />
+                                            </a>
+                                        ) : (
+                                            <p className="text-slate-300 text-sm break-all">{selectedAppointment.contactInfo.details}</p>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         )}
 
@@ -260,7 +301,6 @@ export default function AdminPage() {
                                     >
                                         {isUpdating ? <FiLoader className="animate-spin" /> : <><FiCheckCircle /> Ukończono</>}
                                     </button>
-                                    {/* ZMIANA: Przycisk "Anulowano" na "Nie ukończono" */}
                                     <button 
                                         onClick={() => handleUpdateStatus(selectedAppointment.id, 'NOT_COMPLETED')}
                                         disabled={isUpdating}

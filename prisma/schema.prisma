@@ -148,7 +148,7 @@ model Appointment {
   subject       Subject
   price         Int               // Cena w groszach
   notes         String?           // Notatki od ucznia
-  contactInfo   String?           // ✅ NOWE POLE: Dane kontaktowe do lekcji online
+  contactInfo   Json?           // ✅ NOWE POLE: Dane kontaktowe do lekcji online
   paymentStatus String?
   address       String?
   teacherId     String
