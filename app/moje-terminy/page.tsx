@@ -175,7 +175,7 @@ export default function MojeTerminyPage() {
 
             <AnimatePresence>
                 {selectedAppointment && (
-                    <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }} className="fixed top-0 right-0 h-full w-full max-w-lg bg-slate-800/80 backdrop-blur-lg shadow-2xl z-50 p-8 overflow-y-auto">
+                    <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }} className="fixed top-0 right-0 h-full w-full max-w-lg bg-slate-800/80 backdrop-blur-lg shadow-2xl z-[9999] p-8 overflow-y-auto">
                         <button onClick={() => setSelectedAppointment(null)} className="absolute cursor-pointer top-6 right-6 p-2 rounded-full hover:bg-slate-700"><FiX /></button>
                         <h2 className="text-4xl mb-2">{selectedAppointment.subject}</h2>
                         <div className="flex items-center gap-3 font-sans text-purple-200/80 mb-6">{typeDetails[selectedAppointment.type].icon}<span>{typeDetails[selectedAppointment.type].text}</span></div>
