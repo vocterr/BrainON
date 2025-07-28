@@ -33,10 +33,10 @@ export default function WybierzTerminPage() {
     const [selectedOption, setSelectedOption] = useState<OptionType | null>(null);
     const [notes, setNotes] = useState('');
     const [contactInfo, setContactInfo] = useState('');
-    const [address, setAddress] = useState(''); // State for address
+    const [address, setAddress] = useState('');
     const [formattedDate, setFormattedDate] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [isBookingOnSite, setIsBookingOnSite] = useState(false); 
+    const [isBookingOnSite, setIsBookingOnSite] = useState(false);
     const [error, setError] = useState('');
 
     useEffect(() => {
@@ -47,7 +47,7 @@ export default function WybierzTerminPage() {
     }, [date]);
     
     const getBookingData = () => {
-        if (!selectedOption || !selectedSubject || !session?.user?.id || !date || !time) {
+        if (!selectedOption || !selectedSubject || !session?.user?.id || !dateStr || !time) {
             setError("Proszę wybrać przedmiot i formę zajęć.");
             return null;
         }
@@ -63,13 +63,13 @@ export default function WybierzTerminPage() {
         }
 
         const selectedOptionDetails = options.find(o => o.id === selectedOption);
-        const appointmentDateTime = new Date(date);
-        const [hours, minutes] = time.split(':');
-        appointmentDateTime.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+        
+        // Zmiana polega na utworzeniu daty w formacie ISO bez strefy czasowej
+        const appointmentDateTime = `${dateStr}T${time}:00`;
 
         return {
             userId: session.user.id,
-            appointmentDateTime: appointmentDateTime.toISOString(),
+            appointmentDateTime: appointmentDateTime,
             subject: selectedSubject,
             option: {
                 id: selectedOptionDetails?.id,
@@ -204,39 +204,39 @@ export default function WybierzTerminPage() {
                         {/* Step 3: Conditionally rendered contact info field */}
                         {selectedOption === 'ONLINE' && (
                              <motion.div variants={{hidden: {opacity:0, y:20}, visible: {opacity:1, y:0}}} initial="hidden" animate="visible">
-                                <h3 className="text-2xl mb-4">Krok 3: Jak się skontaktujemy?</h3>
-                                <div className="relative">
-                                    <FiShare2 className="absolute top-1/2 left-5 -translate-y-1/2 text-purple-300/70 text-xl pointer-events-none" />
-                                    <input
-                                        value={contactInfo}
-                                        onChange={(e) => {
-                                            setContactInfo(e.target.value);
-                                            if (error.includes("dane kontaktowe")) setError('');
-                                        }}
-                                        placeholder="Podaj nazwę Discord, Messenger, nr tel..."
-                                        className="w-full p-4 pl-14 rounded-xl bg-slate-800/50 border border-slate-700 font-sans text-base text-white outline-none focus:border-purple-400 transition-colors"
-                                    />
-                                </div>
-                            </motion.div>
+                                 <h3 className="text-2xl mb-4">Krok 3: Jak się skontaktujemy?</h3>
+                                 <div className="relative">
+                                     <FiShare2 className="absolute top-1/2 left-5 -translate-y-1/2 text-purple-300/70 text-xl pointer-events-none" />
+                                     <input
+                                         value={contactInfo}
+                                         onChange={(e) => {
+                                             setContactInfo(e.target.value);
+                                             if (error.includes("dane kontaktowe")) setError('');
+                                         }}
+                                         placeholder="Podaj nazwę Discord, Messenger, nr tel..."
+                                         className="w-full p-4 pl-14 rounded-xl bg-slate-800/50 border border-slate-700 font-sans text-base text-white outline-none focus:border-purple-400 transition-colors"
+                                     />
+                                 </div>
+                             </motion.div>
                         )}
                         
                         {/* Step 3: Conditionally rendered address field */}
                         {selectedOption === 'STUDENT_HOME' && (
                              <motion.div variants={{hidden: {opacity:0, y:20}, visible: {opacity:1, y:0}}} initial="hidden" animate="visible">
-                                <h3 className="text-2xl mb-4">Krok 3: Gdzie mam dojechać?</h3>
-                                <div className="relative">
-                                    <FiMapPin className="absolute top-1/2 left-5 -translate-y-1/2 text-purple-300/70 text-xl pointer-events-none" />
-                                    <input
-                                        value={address}
-                                        onChange={(e) => {
-                                            setAddress(e.target.value);
-                                            if (error.includes("podać adres")) setError('');
-                                        }}
-                                        placeholder="Podaj dokładny adres"
-                                        className="w-full p-4 pl-14 rounded-xl bg-slate-800/50 border border-slate-700 font-sans text-base text-white outline-none focus:border-purple-400 transition-colors"
-                                    />
-                                </div>
-                            </motion.div>
+                                 <h3 className="text-2xl mb-4">Krok 3: Gdzie mam dojechać?</h3>
+                                 <div className="relative">
+                                     <FiMapPin className="absolute top-1/2 left-5 -translate-y-1/2 text-purple-300/70 text-xl pointer-events-none" />
+                                     <input
+                                         value={address}
+                                         onChange={(e) => {
+                                             setAddress(e.target.value);
+                                             if (error.includes("podać adres")) setError('');
+                                         }}
+                                         placeholder="Podaj dokładny adres"
+                                         className="w-full p-4 pl-14 rounded-xl bg-slate-800/50 border border-slate-700 font-sans text-base text-white outline-none focus:border-purple-400 transition-colors"
+                                     />
+                                 </div>
+                             </motion.div>
                         )}
                         
                         {/* Step 4: Notes */}
