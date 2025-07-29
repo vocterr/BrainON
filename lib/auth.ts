@@ -1,3 +1,4 @@
+// auth.ts
 import { AuthOptions } from "next-auth";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import GoogleProvider from "next-auth/providers/google";
@@ -5,8 +6,6 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcrypt";
 import prisma from "@/prisma/prisma";
 
-// Ten plik zawiera i eksportuje konfigurację,
-// dzięki czemu można jej używać w wielu miejscach.
 export const authOptions: AuthOptions = {
     adapter: PrismaAdapter(prisma),
     providers: [
@@ -37,7 +36,9 @@ export const authOptions: AuthOptions = {
                 if (!isCorrectPassword) {
                     throw new Error('Nieprawidłowe dane logowania');
                 }
-                return user;
+                // WAŻNE: Zwracany obiekt 'user' z authorize powinien zawierać ID
+                // NextAuth.js automatycznie przekazuje go do JWT callback
+                return user; // Prisma user model powinien mieć id, role, hasUsedFreeLesson
             }
         })
     ],
@@ -48,16 +49,42 @@ export const authOptions: AuthOptions = {
     secret: process.env.NEXTAUTH_SECRET,
     callbacks: {
         async jwt({ token, user }) {
+            // 'user' jest dostępne tylko przy pierwszym logowaniu lub przy odświeżeniu sesji
+            // i pochodzi z authorize() lub adaptera.
             if (user) {
                 token.id = user.id;
-                token.role = user.role;
+                // Upewnij się, że 'user.role' jest bezpiecznie przypisywane, np. z kontrolą istnienia
+                token.role = (user as any).role || null; // Rzutowanie na 'any' tymczasowo, jeśli 'user' nie ma 'role' w domyślnych typach NextAuth
+                token.hasUsedFreeLesson = (user as any).hasUsedFreeLesson || false; // Podobnie dla hasUsedFreeLesson
             }
             return token;
         },
         async session({ session, token }) {
             if (session.user) {
                 session.user.id = token.id as string;
+                // 'token.role' powinno być już string | null dzięki JWT type
                 session.user.role = token.role;
+
+                // === KLUCZOWE: POBIERANIE hasUsedFreeLesson Z BAZY DANYCH ===
+                // To jest najważniejsza zmiana dla aktualizacji UI
+                if (token.id) { // Upewnij się, że token.id istnieje
+                    try {
+                        const userInDb = await prisma.user.findUnique({
+                            where: { id: token.id as string },
+                            select: { hasUsedFreeLesson: true } // Wybierz tylko to pole
+                        });
+                        // Przypisz wartość z bazy danych do sesji.
+                        // Jeśli userInDb?.hasUsedFreeLesson jest null/undefined, ustaw na false.
+                        session.user.hasUsedFreeLesson = userInDb?.hasUsedFreeLesson || false;
+                    } catch (error) {
+                        console.error("Błąd podczas pobierania hasUsedFreeLesson:", error);
+                        // Możesz zdecydować, co zrobić w przypadku błędu, np. pozostawić domyślną wartość
+                        session.user.hasUsedFreeLesson = false; // Domyślna wartość w przypadku błędu
+                    }
+                } else {
+                    session.user.hasUsedFreeLesson = false; // Domyślna wartość jeśli brak ID w tokenie
+                }
+                // ============================================================
             }
             return session;
         },
