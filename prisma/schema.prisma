@@ -46,6 +46,7 @@ model User {
   hashedPassword String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+  hasUsedFreeLesson Boolean @default(false)
 
   // Next-Auth relations
   accounts     Account[]

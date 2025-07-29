@@ -7,6 +7,7 @@ declare module 'next-auth' {
     user: {
       id: string; // Dodajemy pole 'id'
       role?: string | null;
+      hasUsedFreeLesson?: boolean
     } & DefaultSession['user'];
   }
   interface User {
