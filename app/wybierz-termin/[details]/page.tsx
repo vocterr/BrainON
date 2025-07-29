@@ -44,7 +44,7 @@ export default function WybierzTerminPage() {
     const [error, setError] = useState('');
 
     // Dodane: Pobieranie stanu hasUsedFreeLesson z sesji
-    const hasUsedFreeLesson = session?.user?.hasUsedFreeLesson ?? false; // Domyślnie false
+    const hasUsedFreeLesson = session?.user?.hasUsedFreeLesson! // Domyślnie false
 
     useEffect(() => {
         if (date) {
@@ -383,7 +383,7 @@ export default function WybierzTerminPage() {
                                         <motion.button 
                                             onClick={handleFreeBooking} 
                                             disabled={!selectedOption || !selectedSubject || isBookingOnSite || isLoading} // Zmienione na nową funkcję
-                                            className="w-full mt-8 flex items-center justify-center gap-3 p-4 rounded-xl bg-gradient-to-r from-green-400 to-emerald-500 text-white text-xl shadow-lg hover:shadow-emerald-500/40 transition-shadow disabled:opacity-50" 
+                                            className="w-full cursor-pointer mt-8 flex items-center justify-center gap-3 p-4 rounded-xl bg-gradient-to-r from-green-400 to-emerald-500 text-white text-xl shadow-lg hover:shadow-emerald-500/40 transition-shadow disabled:opacity-50" 
                                             whileHover={{scale: !selectedOption || !selectedSubject || isLoading || isBookingOnSite ? 1 : 1.02}} 
                                             whileTap={{scale: !selectedOption || !selectedSubject || isLoading || isBookingOnSite ? 1 : 0.98}}
                                         >
