@@ -18,7 +18,7 @@ type ContactMethod = 'DISCORD' | 'MESSENGER' | 'WHATSAPP' | 'OTHER'; // Dodano t
 
 export default function WybierzTerminPage() {
     const router = useRouter();
-    const { data: session } = useSession();
+    const { data: session, update } = useSession();
     const params = useParams();
     const details = params?.details as string;
     const isMobile = useIsMobile();
@@ -149,6 +149,7 @@ export default function WybierzTerminPage() {
                 const data = await response.json();
                 throw new Error(data.error || 'Nie udało się zarezerwować darmowej lekcji.');
             }
+            await update();
             router.push('/rezerwacja-sukces');
         } catch (err: any) {
             setError(err.message || "Wystąpił nieoczekiwany błąd.");
