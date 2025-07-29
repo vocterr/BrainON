@@ -92,7 +92,7 @@ export default function HomePage() {
                             <motion.button onClick={() => changeRoute("/matematyka")} whileHover={{ scale: 1.05, boxShadow: "0px 10px 30px -10px rgba(192, 132, 252, 0.4)" }} whileTap={{ scale: 0.95 }} className="flex hover:cursor-pointer items-center gap-3 px-8 py-4 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xl shadow-lg">
                                 <FiBookOpen /> Matematyka
                             </motion.button>
-                            <motion.button onClick={() => changeRoute("/inf02")} whileHover={{ scale: 1.05, boxShadow: "0px 10px 30px -10px rgba(56, 189, 248, 0.4)" }} whileTap={{ scale: 0.95 }} className="flex hover:cursor-pointer items-center gap-3 px-8 py-4 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-500 text-white text-xl shadow-lg">
+                            <motion.button onClick={() => changeRoute("/inf.02")} whileHover={{ scale: 1.05, boxShadow: "0px 10px 30px -10px rgba(56, 189, 248, 0.4)" }} whileTap={{ scale: 0.95 }} className="flex hover:cursor-pointer items-center gap-3 px-8 py-4 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-500 text-white text-xl shadow-lg">
                                 <FiMonitor /> INF.02
                             </motion.button>
                         </motion.div>
