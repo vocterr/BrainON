@@ -180,7 +180,7 @@ export default function HomePage() {
                             variants={itemVariants}
                             whileHover={{ scale: 1.05, boxShadow: "0px 10px 30px -10px rgba(251, 191, 36, 0.4)" }} 
                             whileTap={{ scale: 0.95 }} 
-                            className="inline-flex items-center gap-3 px-10 py-5 rounded-full bg-gradient-to-r from-yellow-400 via-orange-500 to-orange-600 text-white text-2xl shadow-lg font-chewy transition-all duration-300 transform hover:rotate-1"
+                            className="inline-flex items-center gap-3 px-10 py-5 rounded-full bg-gradient-to-r from-yellow-400 via-orange-500 to-orange-600 text-white text-2xl shadow-lg font-chewy transition-all duration-300 transform cursor-pointer"
                         >
                             Zarezerwuj Termin Teraz <FiArrowRight className="ml-2" />
                         </motion.button>
