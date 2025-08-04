@@ -66,7 +66,7 @@ export const authOptions: AuthOptions = {
                 session.user.role = token.role;
 
                 // === KLUCZOWE: POBIERANIE hasUsedFreeLesson Z BAZY DANYCH ===
-                // To jest najważniejsza zmiana dla aktualizacji UI
+                // To jest najważniejsza zmiana dla aktualizacji UI1
                 if (token.id) { // Upewnij się, że token.id istnieje
                     try {
                         const userInDb = await prisma.user.findUnique({
